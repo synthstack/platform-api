@@ -32,7 +32,7 @@ endpoints are announced in release notes before removal.
 
 ## Related resources
 
-- API documentation: [https://api.synthstack.ai/v1](https://api.synthstack.ai/v1)
+- API documentation: [https://api.synthstack.ai/v2](https://api.synthstack.ai/v2)
 - Support: [support@synthstack.ai](mailto:support@synthstack.ai)
 - Terms of Service: [https://synthstack.ai/legal/terms](https://synthstack.ai/legal/terms)
 
