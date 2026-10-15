@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: SynthStack Backend API
-  version: v2.15.0+18721
+  version: v2.16.0+18897
   contact:
     name: SynthStack
     url: https://synthstack.ai
@@ -30,6 +30,8 @@ tags:
     description: Feedback operations.
   - name: Integrations
     description: Integrations operations.
+  - name: News
+    description: News operations.
   - name: Notifications
     description: Notifications operations.
   - name: Oauth Server
@@ -5097,6 +5099,126 @@ paths:
                 $ref: '#/components/schemas/StandardErrorResponse'
       tags:
         - Integrations
+  /news/unread:
+    get:
+      tags:
+        - News
+      operationId: newsUnread
+      summary: List current user unread news
+      description: 'Active news with date <= now and no user read record. regular/required additionally require news.date >= user.created_at (inclusive UTC); terms are evergreen, including for users registered later. Ordered by terms, required, regular, then date DESC and internal id DESC. Delivery persists first publication before returning the content and serializes with protected edits. Process page 1 and refetch page 1 after each successful read to avoid skipping a shrinking collection. Any error must degrade the frontend toward availability: do not block the interface; retry later. No server gate restricts other APIs.'
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: No application upper bound.
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Unread news; an empty page keeps the actual collection total.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/StandardResponse'
+                  - type: object
+                    required:
+                      - data
+                      - meta
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/NewsItem'
+                      meta:
+                        $ref: '#/components/schemas/NewsPagination'
+        '401':
+          description: 'UNAUTHORIZED: missing or malformed Authorization header. INVALID_TOKEN: invalid or expired Bearer token.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+        '422':
+          description: 'VALIDATION_ERROR: pagination errors in error.details. page must be an integer >= 1 with no application upper bound; per_page must be an integer from 1 to 100.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+        '500':
+          description: 'INTERNAL_ERROR: registration date is unavailable through auth or a technical failure occurred, including repeated concurrent changes preventing page delivery after three attempts. No unread delivery; frontend remains available and retries later.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+  /news/{id}/read:
+    post:
+      tags:
+        - News
+      operationId: newsMarkRead
+      summary: Record reading or explicit consent
+      description: 'Business check order: body types, existence/publication, audience for first regular/required read, acknowledgement for blocking types, idempotent recording. Invalid external IDs are rejected before body validation. Never-published or out-of-audience news returns 404. Previously published news remains readable after deactivation or moving its date to the future, within the current audience. On an audience 404 refresh the unread queue. Existing read records bypass audience/auth-port/IP checks, but still require a correctly typed body and true acknowledgement for blocking types. terms reads never call auth profile. Correct retries return the first record unchanged (read_at, IP, acknowledgement, user agent), including concurrent requests and visibility/audience changes. First recording requires a valid IPv4/IPv6 from Request.getIp; no forwarded header processing. User agent is truncated to 512 Unicode characters. Every POST error means consent is not confirmed as saved: keep the blocking dialog open, with retry and exit.'
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/NewsId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewsReadInput'
+      responses:
+        '200':
+          description: Read durably recorded, or original record returned for an idempotent retry.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/StandardResponse'
+                  - type: object
+                    required:
+                      - data
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/NewsReadResult'
+        '401':
+          description: 'UNAUTHORIZED: missing or malformed Authorization header. INVALID_TOKEN: invalid or expired Bearer token.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+        '404':
+          description: 'NOT_FOUND: invalid external ID, absent news, never published news, or first regular/required read outside current audience. Refresh the unread queue.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+        '422':
+          description: 'VALIDATION_ERROR: invalid body types. ACKNOWLEDGEMENT_REQUIRED: terms/required without acknowledged=true, including an existing read. No record changed.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+        '500':
+          description: 'CLIENT_IP_UNAVAILABLE: missing/invalid client IP for first read. INTERNAL_ERROR: registration date unavailable for first regular/required read, or technical failure. Consent is not confirmed as saved; keep the dialog open with retry/exit. IP/auth validation failures create no read. Terms and existing reads do not depend on the auth profile port.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
   /notifications:
     get:
       summary: List current user's notifications
@@ -16469,6 +16591,108 @@ components:
           maxLength: 255
         metadata:
           $ref: '#/components/schemas/IntegrationBoundedPayloadObject'
+    NewsId:
+      type: string
+      pattern: ^nws_[a-zA-Z0-9]{6,}$
+      example: nws_aB3xYz
+    NewsType:
+      type: string
+      enum:
+        - regular
+        - terms
+        - required
+      description: terms and required require explicit acknowledgement and have immutable content after publication. terms are evergreen for all users; at most one terms news may be active, including scheduled news.
+    NewsMarkdown:
+      type: string
+      minLength: 1
+      maxLength: 50000
+      description: Verbatim Markdown source, without server parsing, conversion or sanitization. For terms this is the canonical consent text. The character limit is configurable (message_max_length, default 50000). Clients must render Markdown safely.
+    NewsDate:
+      type: string
+      format: date-time
+      description: ISO 8601 datetime with timezone and up to six fractional digits. Responses use UTC in YYYY-MM-DDTHH:mm:ssZ format, without fractional seconds.
+    NewsTitle:
+      type: string
+      minLength: 1
+      maxLength: 255
+      description: Title in Unicode characters; title_max_length defaults to 255.
+    NewsBoolean:
+      type: boolean
+      description: Strict JSON true or false. Strings, numbers and null are invalid (422 VALIDATION_ERROR).
+    NewsPagination:
+      type: object
+      additionalProperties: false
+      required:
+        - total
+        - limit
+        - offset
+        - has_more
+      properties:
+        total:
+          type: integer
+          minimum: 0
+          description: Size of the entire filtered collection, including on an empty page beyond its end.
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+        offset:
+          type: integer
+          minimum: 0
+        has_more:
+          type: boolean
+    NewsItem:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - date
+        - title
+        - message
+        - type
+      properties:
+        id:
+          $ref: '#/components/schemas/NewsId'
+        date:
+          $ref: '#/components/schemas/NewsDate'
+        title:
+          $ref: '#/components/schemas/NewsTitle'
+        message:
+          $ref: '#/components/schemas/NewsMarkdown'
+        type:
+          $ref: '#/components/schemas/NewsType'
+    NewsReadInput:
+      type: object
+      properties:
+        acknowledged:
+          allOf:
+            - $ref: '#/components/schemas/NewsBoolean'
+          default: false
+      description: acknowledged is optional, defaults to false. terms/required require true on every call including retries. regular always stores false. User identity, read time, IP and user agent are server determined; body metadata is not used.
+    NewsReadResult:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - status
+        - acknowledged
+        - read_at
+        - message
+      properties:
+        id:
+          $ref: '#/components/schemas/NewsId'
+        status:
+          type: string
+          enum:
+            - read
+        acknowledged:
+          type: boolean
+        read_at:
+          $ref: '#/components/schemas/NewsDate'
+        message:
+          type: string
+          example: News marked as read
+          description: Action result text, not news Markdown content.
     NotificationId:
       type: string
       description: Console notification identifier (prefix "ntf").
