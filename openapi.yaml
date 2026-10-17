@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: SynthStack Backend API
-  version: v2.16.0+18897
+  version: v2.17.0+19502
   contact:
     name: SynthStack
     url: https://synthstack.ai
@@ -122,6 +122,457 @@ paths:
                 $ref: '#/components/schemas/StandardErrorResponse'
       tags:
         - Account Settings
+  /agents/{agentId}/services:
+    get:
+      summary: List agent owner service declarations
+      description: 'All operations, including GET, require requireTenantAgent and assertCanMutate: owner/admin/superadmin with an editable connection, or the member who created the editable agent. Marketplace consumers cannot read this layer. Only superadmins can create declarations from platform catalog entries. Existing declarations remain readable, editable and removable after catalog deprecation or public-to-platform changes. Secret row values and template defaults are masked as ***. No runtime resolution is performed. Stable order: created_at DESC, id DESC. No server search or custom sorting.'
+      operationId: agentServiceList
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AgentIdPath'
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 20
+            maximum: 100
+      responses:
+        '200':
+          description: Masked declaration page
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/StandardResponse'
+                  - type: object
+                    required:
+                      - data
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/AgentServiceDeclarationListItem'
+                      meta:
+                        type: object
+                        required:
+                          - total
+                          - limit
+                          - offset
+                          - has_more
+                        properties:
+                          total:
+                            type: integer
+                          limit:
+                            type: integer
+                          offset:
+                            type: integer
+                          has_more:
+                            type: boolean
+        '401':
+          $ref: '#/components/responses/AgentUnauthorized'
+        '403':
+          $ref: '#/components/responses/AgentServiceForbidden'
+        '404':
+          $ref: '#/components/responses/AgentServiceNotFound'
+        '422':
+          $ref: '#/components/responses/AgentServiceInvalid'
+        '500':
+          $ref: '#/components/responses/AgentServiceDependencyFailure'
+      tags:
+        - Agent
+    post:
+      summary: Create agent owner service declaration
+      description: 'All operations, including GET, require requireTenantAgent and assertCanMutate: owner/admin/superadmin with an editable connection, or the member who created the editable agent. Marketplace consumers cannot read this layer. Only superadmins can create declarations from platform catalog entries. Existing declarations remain readable, editable and removable after catalog deprecation or public-to-platform changes. Secret row values and template defaults are masked as ***. No runtime resolution is performed.'
+      operationId: agentServiceCreate
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AgentIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentServiceDeclarationAddRequestBody'
+      responses:
+        '201':
+          description: Masked declaration
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/StandardResponse'
+                  - type: object
+                    required:
+                      - data
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/AgentServiceDeclarationDetail'
+        '401':
+          $ref: '#/components/responses/AgentUnauthorized'
+        '403':
+          $ref: '#/components/responses/AgentServiceForbidden'
+        '404':
+          $ref: '#/components/responses/AgentServiceNotFound'
+        '409':
+          $ref: '#/components/responses/AgentServiceConflict'
+        '422':
+          $ref: '#/components/responses/AgentServiceInvalid'
+        '500':
+          $ref: '#/components/responses/AgentServiceDependencyFailure'
+      tags:
+        - Agent
+  /agents/{agentId}/services/{declId}:
+    get:
+      summary: Get agent owner service declaration
+      description: 'All operations, including GET, require requireTenantAgent and assertCanMutate: owner/admin/superadmin with an editable connection, or the member who created the editable agent. Marketplace consumers cannot read this layer. Only superadmins can create declarations from platform catalog entries. Existing declarations remain readable, editable and removable after catalog deprecation or public-to-platform changes. Secret row values and template defaults are masked as ***. No runtime resolution is performed.'
+      operationId: agentServiceGet
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AgentIdPath'
+        - name: declId
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/AgentServiceDeclarationId'
+      responses:
+        '200':
+          description: Masked declaration
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/StandardResponse'
+                  - type: object
+                    required:
+                      - data
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/AgentServiceDeclarationDetail'
+        '401':
+          $ref: '#/components/responses/AgentUnauthorized'
+        '403':
+          $ref: '#/components/responses/AgentServiceForbidden'
+        '404':
+          $ref: '#/components/responses/AgentServiceNotFound'
+        '422':
+          $ref: '#/components/responses/AgentServiceInvalid'
+        '500':
+          $ref: '#/components/responses/AgentServiceDependencyFailure'
+      tags:
+        - Agent
+    patch:
+      summary: Update agent owner service declaration
+      description: 'All operations, including GET, require requireTenantAgent and assertCanMutate: owner/admin/superadmin with an editable connection, or the member who created the editable agent. Marketplace consumers cannot read this layer. Only superadmins can create declarations from platform catalog entries. Existing declarations remain readable, editable and removable after catalog deprecation or public-to-platform changes. Secret row values and template defaults are masked as ***. No runtime resolution is performed.'
+      operationId: agentServiceUpdate
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AgentIdPath'
+        - name: declId
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/AgentServiceDeclarationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentServiceDeclarationUpdateRequestBody'
+      responses:
+        '200':
+          description: Masked declaration
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/StandardResponse'
+                  - type: object
+                    required:
+                      - data
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/AgentServiceDeclarationDetail'
+        '401':
+          $ref: '#/components/responses/AgentUnauthorized'
+        '403':
+          $ref: '#/components/responses/AgentServiceForbidden'
+        '404':
+          $ref: '#/components/responses/AgentServiceNotFound'
+        '409':
+          $ref: '#/components/responses/AgentServiceConflict'
+        '422':
+          $ref: '#/components/responses/AgentServiceInvalid'
+        '500':
+          $ref: '#/components/responses/AgentServiceDependencyFailure'
+      tags:
+        - Agent
+    delete:
+      summary: Delete agent owner service declaration
+      description: 'All operations, including GET, require requireTenantAgent and assertCanMutate: owner/admin/superadmin with an editable connection, or the member who created the editable agent. Marketplace consumers cannot read this layer. Only superadmins can create declarations from platform catalog entries. Existing declarations remain readable, editable and removable after catalog deprecation or public-to-platform changes. Secret row values and template defaults are masked as ***. No runtime resolution is performed.'
+      operationId: agentServiceDelete
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/AgentIdPath'
+        - name: declId
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/AgentServiceDeclarationId'
+      responses:
+        '204':
+          description: Declaration removed; empty body.
+        '401':
+          $ref: '#/components/responses/AgentUnauthorized'
+        '403':
+          $ref: '#/components/responses/AgentServiceForbidden'
+        '404':
+          $ref: '#/components/responses/AgentServiceNotFound'
+        '422':
+          $ref: '#/components/responses/AgentServiceInvalid'
+        '500':
+          $ref: '#/components/responses/AgentServiceDependencyFailure'
+      tags:
+        - Agent
+  /projects/{projectId}/agents/{agentId}/services:
+    get:
+      summary: List project agent service declarations
+      description: 'Project membership and an existing tenant agent assignment are required. Only project_assignment declarations are accessible. Creating platform catalog entries is forbidden even for superadmins. Existing declarations remain readable, editable and removable after catalog deprecation or public-to-platform changes. Secret row values and template defaults are masked as ***. No runtime resolution is performed. Stable order: created_at DESC, id DESC. No server search or custom sorting.'
+      operationId: projectAgentServiceList
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdPath'
+        - $ref: '#/components/parameters/AgentIdPath'
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 20
+            maximum: 100
+      responses:
+        '200':
+          description: Masked declaration page
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/StandardResponse'
+                  - type: object
+                    required:
+                      - data
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/ProjectAgentServiceDeclarationListItem'
+                      meta:
+                        type: object
+                        required:
+                          - total
+                          - limit
+                          - offset
+                          - has_more
+                        properties:
+                          total:
+                            type: integer
+                          limit:
+                            type: integer
+                          offset:
+                            type: integer
+                          has_more:
+                            type: boolean
+        '401':
+          $ref: '#/components/responses/AgentUnauthorized'
+        '403':
+          $ref: '#/components/responses/ProjectAgentServiceForbidden'
+        '404':
+          $ref: '#/components/responses/AgentServiceNotFound'
+        '422':
+          $ref: '#/components/responses/AgentServiceInvalid'
+        '500':
+          $ref: '#/components/responses/AgentServiceDependencyFailure'
+      tags:
+        - Agent
+    post:
+      summary: Create project agent service declaration
+      description: Project membership and an existing tenant agent assignment are required. Only project_assignment declarations are accessible. Creating platform catalog entries is forbidden even for superadmins. Existing declarations remain readable, editable and removable after catalog deprecation or public-to-platform changes. Secret row values and template defaults are masked as ***. No runtime resolution is performed.
+      operationId: projectAgentServiceCreate
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdPath'
+        - $ref: '#/components/parameters/AgentIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentServiceDeclarationAddRequestBody'
+      responses:
+        '201':
+          description: Masked declaration
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/StandardResponse'
+                  - type: object
+                    required:
+                      - data
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ProjectAgentServiceDeclarationDetail'
+        '401':
+          $ref: '#/components/responses/AgentUnauthorized'
+        '403':
+          $ref: '#/components/responses/ProjectAgentServiceForbidden'
+        '404':
+          $ref: '#/components/responses/AgentServiceNotFound'
+        '409':
+          $ref: '#/components/responses/AgentServiceConflict'
+        '422':
+          $ref: '#/components/responses/AgentServiceInvalid'
+        '500':
+          $ref: '#/components/responses/AgentServiceDependencyFailure'
+      tags:
+        - Agent
+  /projects/{projectId}/agents/{agentId}/services/{declId}:
+    get:
+      summary: Get project agent service declaration
+      description: Project membership and an existing tenant agent assignment are required. Only project_assignment declarations are accessible. Creating platform catalog entries is forbidden even for superadmins. Existing declarations remain readable, editable and removable after catalog deprecation or public-to-platform changes. Secret row values and template defaults are masked as ***. No runtime resolution is performed.
+      operationId: projectAgentServiceGet
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdPath'
+        - $ref: '#/components/parameters/AgentIdPath'
+        - name: declId
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/AgentServiceDeclarationId'
+      responses:
+        '200':
+          description: Masked declaration
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/StandardResponse'
+                  - type: object
+                    required:
+                      - data
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ProjectAgentServiceDeclarationDetail'
+        '401':
+          $ref: '#/components/responses/AgentUnauthorized'
+        '403':
+          $ref: '#/components/responses/ProjectAgentServiceForbidden'
+        '404':
+          $ref: '#/components/responses/AgentServiceNotFound'
+        '422':
+          $ref: '#/components/responses/AgentServiceInvalid'
+        '500':
+          $ref: '#/components/responses/AgentServiceDependencyFailure'
+      tags:
+        - Agent
+    patch:
+      summary: Update project agent service declaration
+      description: Project membership and an existing tenant agent assignment are required. Only project_assignment declarations are accessible. Creating platform catalog entries is forbidden even for superadmins. Existing declarations remain readable, editable and removable after catalog deprecation or public-to-platform changes. Secret row values and template defaults are masked as ***. No runtime resolution is performed.
+      operationId: projectAgentServiceUpdate
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdPath'
+        - $ref: '#/components/parameters/AgentIdPath'
+        - name: declId
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/AgentServiceDeclarationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentServiceDeclarationUpdateRequestBody'
+      responses:
+        '200':
+          description: Masked declaration
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/StandardResponse'
+                  - type: object
+                    required:
+                      - data
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ProjectAgentServiceDeclarationDetail'
+        '401':
+          $ref: '#/components/responses/AgentUnauthorized'
+        '403':
+          $ref: '#/components/responses/ProjectAgentServiceForbidden'
+        '404':
+          $ref: '#/components/responses/AgentServiceNotFound'
+        '409':
+          $ref: '#/components/responses/AgentServiceConflict'
+        '422':
+          $ref: '#/components/responses/AgentServiceInvalid'
+        '500':
+          $ref: '#/components/responses/AgentServiceDependencyFailure'
+      tags:
+        - Agent
+    delete:
+      summary: Delete project agent service declaration
+      description: Project membership and an existing tenant agent assignment are required. Only project_assignment declarations are accessible. Creating platform catalog entries is forbidden even for superadmins. Existing declarations remain readable, editable and removable after catalog deprecation or public-to-platform changes. Secret row values and template defaults are masked as ***. No runtime resolution is performed.
+      operationId: projectAgentServiceDelete
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProjectIdPath'
+        - $ref: '#/components/parameters/AgentIdPath'
+        - name: declId
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/AgentServiceDeclarationId'
+      responses:
+        '204':
+          description: Declaration removed; empty body.
+        '401':
+          $ref: '#/components/responses/AgentUnauthorized'
+        '403':
+          $ref: '#/components/responses/ProjectAgentServiceForbidden'
+        '404':
+          $ref: '#/components/responses/AgentServiceNotFound'
+        '422':
+          $ref: '#/components/responses/AgentServiceInvalid'
+        '500':
+          $ref: '#/components/responses/AgentServiceDependencyFailure'
+      tags:
+        - Agent
   /agents/{agentId}/skills:
     get:
       summary: List skills attached to an agent
@@ -494,7 +945,7 @@ paths:
   /agents/{id}/clone:
     post:
       summary: Clone agent
-      description: Clone an existing editable agent with configuration.
+      description: Clone requires assertCanMutate. Members may clone only editable agents they created; another creator's agent is rejected regardless of whether it has service declarations. Read-only marketplace agents cannot be cloned by any role. Refusals create no partial clone. Agent and tenant_agent service declarations are copied atomically, with fresh odd ENV row IDs and regenerated generated values; project_assignment declarations are not copied. Member refusals use FORBIDDEN, including read-only agents (previously AGENT_NOT_EDITABLE); elevated roles on read-only agents retain AGENT_NOT_EDITABLE.
       operationId: agentClone
       parameters:
         - $ref: '#/components/parameters/AgentIdAsIdPath'
@@ -510,7 +961,7 @@ paths:
         '401':
           $ref: '#/components/responses/AgentUnauthorized'
         '403':
-          $ref: '#/components/responses/AgentForbidden'
+          $ref: '#/components/responses/AgentServiceForbidden'
         '404':
           $ref: '#/components/responses/AgentNotFound'
         '409':
@@ -2477,7 +2928,7 @@ paths:
   /auth/login:
     post:
       summary: Login
-      description: Authenticate with email/password. Returns JWT tokens, or a short-lived TOTP challenge when 2FA is enabled. Password and account checks precede tenant membership lookup. A tenant dependency failure issues no session. Confirmed absence of membership issues JWT without tid or role. Tenant errors expose only details[].source=tenant and details[].operation=tenantService.getByUserId; technical context and debug are omitted.
+      description: Authenticate with email/password. Returns JWT tokens, or a short-lived TOTP challenge when 2FA is enabled. Password and account checks precede tenant membership lookup. A tenant or idEncode dependency failure issues no session. Confirmed absence of membership issues JWT without tid or role. Tenant errors expose only details[].source=tenant and details[].operation=tenantService.getByUserId; technical context and debug are omitted. idEncode errors expose only details[].source=idEncode and details[].operation=idEncodeService.encodeEntityIdStrict (or idEncodeService.decodeExternalId during bearer verification); technical context and debug are omitted.
       security: []
       requestBody:
         required: true
@@ -2537,13 +2988,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/StandardErrorResponse'
         '500':
-          description: Tenant port configuration, response contract or invocation failed (DEPENDENCY_CONFIGURATION_ERROR, DEPENDENCY_CONTRACT_VIOLATION, DEPENDENCY_FAILED)
+          description: Tenant or idEncode port configuration, response contract or invocation failed (DEPENDENCY_CONFIGURATION_ERROR, DEPENDENCY_CONTRACT_VIOLATION, DEPENDENCY_FAILED)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/StandardErrorResponse'
         '503':
-          description: Tenant membership is temporarily unavailable (DEPENDENCY_UNAVAILABLE)
+          description: Tenant membership or idEncode token claim processing is temporarily unavailable (DEPENDENCY_UNAVAILABLE)
           content:
             application/json:
               schema:
@@ -2554,7 +3005,7 @@ paths:
   /auth/2fa/verify:
     post:
       summary: Complete password login with a TOTP code
-      description: After the live challenge and per-user lockout checks, tenant membership is resolved outside the database transaction, before TOTP code verification. Account, challenge, credential, code and replay checks run under lock before consumption and session issuance. A tenant dependency failure preserves the challenge and is not counted as an invalid factor. Tenant errors expose only details[].source=tenant and details[].operation=tenantService.getByUserId; technical context and debug are omitted. If failure registration in rateLimit fails after an invalid code, the challenge attempt count and exhaustion state are committed before returning 503 RATE_LIMIT_UNAVAILABLE; no session is issued. An unexpected failure in the local failure hook also preserves the challenge writes but returns 500 TWOFA_INTERNAL_ERROR after commit, without issuing a session. A commit failure rolls back the transaction and takes precedence over the registration error. When only failure registration is unavailable, a valid code can still succeed on a live challenge; the database attempt limit, per-IP rate limit and challenge TTL continue to apply.
+      description: After the live challenge and per-user lockout checks, tenant membership is resolved outside the database transaction, before TOTP code verification. Account, challenge, credential, code and replay checks run under lock before consumption and session issuance. A tenant or idEncode dependency failure preserves the challenge and is not counted as an invalid factor. Tenant errors expose only details[].source=tenant and details[].operation=tenantService.getByUserId; technical context and debug are omitted. If failure registration in rateLimit fails after an invalid code, the challenge attempt count and exhaustion state are committed before returning 503 RATE_LIMIT_UNAVAILABLE; no session is issued. An unexpected failure in the local failure hook also preserves the challenge writes but returns 500 TWOFA_INTERNAL_ERROR after commit, without issuing a session. A commit failure rolls back the transaction and takes precedence over the registration error. When only failure registration is unavailable, a valid code can still succeed on a live challenge; the database attempt limit, per-IP rate limit and challenge TTL continue to apply. idEncode errors expose only details[].source=idEncode and details[].operation=idEncodeService.encodeEntityIdStrict (or idEncodeService.decodeExternalId during bearer verification); technical context and debug are omitted.
       security: []
       requestBody:
         required: true
@@ -2640,13 +3091,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/StandardErrorResponse'
         '500':
-          description: TOTP secret decryption or internal 2FA processing failed (TWOFA_INTERNAL_ERROR); Tenant port configuration, response contract or invocation failed (DEPENDENCY_CONFIGURATION_ERROR, DEPENDENCY_CONTRACT_VIOLATION, DEPENDENCY_FAILED)
+          description: TOTP secret decryption or internal 2FA processing failed (TWOFA_INTERNAL_ERROR); Tenant or idEncode port configuration, response contract or invocation failed (DEPENDENCY_CONFIGURATION_ERROR, DEPENDENCY_CONTRACT_VIOLATION, DEPENDENCY_FAILED)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/StandardErrorResponse'
         '503':
-          description: Tenant membership is temporarily unavailable (DEPENDENCY_UNAVAILABLE); rate limiting, lockout state or failure registration is unavailable (RATE_LIMIT_UNAVAILABLE)
+          description: Tenant membership or idEncode token claim processing is temporarily unavailable (DEPENDENCY_UNAVAILABLE); rate limiting, lockout state or failure registration is unavailable (RATE_LIMIT_UNAVAILABLE)
           content:
             application/json:
               schema:
@@ -2723,7 +3174,7 @@ paths:
   /auth/passkeys/login:
     post:
       summary: Login with a discoverable passkey
-      description: Tenant membership lookup follows assertion verification and credential update. A tenant dependency failure issues no session; the consumed challenge is not restored. Request a new challenge after recovery. Tenant errors expose only details[].source=tenant and details[].operation=tenantService.getByUserId; technical context and debug are omitted.
+      description: Tenant membership lookup follows assertion verification and credential update. A tenant or idEncode dependency failure issues no session; the consumed challenge is not restored. Request a new challenge after recovery. Tenant errors expose only details[].source=tenant and details[].operation=tenantService.getByUserId; technical context and debug are omitted. idEncode errors expose only details[].source=idEncode and details[].operation=idEncodeService.encodeEntityIdStrict (or idEncodeService.decodeExternalId during bearer verification); technical context and debug are omitted.
       security: []
       requestBody:
         required: true
@@ -2803,13 +3254,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/StandardErrorResponse'
         '500':
-          description: Tenant port configuration, response contract or invocation failed (DEPENDENCY_CONFIGURATION_ERROR, DEPENDENCY_CONTRACT_VIOLATION, DEPENDENCY_FAILED)
+          description: Tenant or idEncode port configuration, response contract or invocation failed (DEPENDENCY_CONFIGURATION_ERROR, DEPENDENCY_CONTRACT_VIOLATION, DEPENDENCY_FAILED)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/StandardErrorResponse'
         '503':
-          description: Tenant membership is temporarily unavailable (DEPENDENCY_UNAVAILABLE); rate limiting is unavailable (RATE_LIMIT_UNAVAILABLE)
+          description: Tenant membership or idEncode token claim processing is temporarily unavailable (DEPENDENCY_UNAVAILABLE); rate limiting is unavailable (RATE_LIMIT_UNAVAILABLE)
           content:
             application/json:
               schema:
@@ -2849,7 +3300,7 @@ paths:
   /auth/refresh:
     post:
       summary: Refresh token
-      description: Refresh access token using refresh token (with token rotation). Tenant membership lookup precedes rotation. A tenant dependency failure preserves the existing refresh session, which may be retried after recovery. Tenant errors expose only details[].source=tenant and details[].operation=tenantService.getByUserId; technical context and debug are omitted.
+      description: Refresh access token using refresh token (with token rotation). Tenant membership lookup precedes rotation. A tenant or idEncode dependency failure preserves the existing refresh session, which may be retried after recovery. Tenant errors expose only details[].source=tenant and details[].operation=tenantService.getByUserId; technical context and debug are omitted. idEncode errors expose only details[].source=idEncode and details[].operation=idEncodeService.encodeEntityIdStrict (or idEncodeService.decodeExternalId during bearer verification); technical context and debug are omitted.
       security: []
       requestBody:
         required: true
@@ -2921,13 +3372,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/StandardErrorResponse'
         '500':
-          description: Tenant port configuration, response contract or invocation failed (DEPENDENCY_CONFIGURATION_ERROR, DEPENDENCY_CONTRACT_VIOLATION, DEPENDENCY_FAILED)
+          description: Tenant or idEncode port configuration, response contract or invocation failed (DEPENDENCY_CONFIGURATION_ERROR, DEPENDENCY_CONTRACT_VIOLATION, DEPENDENCY_FAILED)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/StandardErrorResponse'
         '503':
-          description: Tenant membership is temporarily unavailable (DEPENDENCY_UNAVAILABLE); rate limiting is unavailable (RATE_LIMIT_UNAVAILABLE)
+          description: Tenant membership or idEncode token claim processing is temporarily unavailable (DEPENDENCY_UNAVAILABLE); rate limiting is unavailable (RATE_LIMIT_UNAVAILABLE)
           content:
             application/json:
               schema:
@@ -3107,6 +3558,18 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/StandardErrorResponse'
+        '500':
+          description: idEncode port configuration, response contract or invocation failed during access token verification (DEPENDENCY_CONFIGURATION_ERROR, DEPENDENCY_CONTRACT_VIOLATION, DEPENDENCY_FAILED)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+        '503':
+          description: idEncode token claim processing is temporarily unavailable (DEPENDENCY_UNAVAILABLE)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
       tags:
         - Auth
       operationId: get_auth_me
@@ -3262,7 +3725,7 @@ paths:
   /auth/me/2fa/confirm:
     post:
       summary: Confirm and activate TOTP enrollment
-      description: Revokes every refresh session, then issues a new JWT pair for the current device. Tenant membership is resolved outside the database transaction, before checking the account, pending credential and confirmation code under lock. A tenant dependency failure preserves existing sessions and pending enrollment. Tenant errors expose only details[].source=tenant and details[].operation=tenantService.getByUserId; technical context and debug are omitted.
+      description: Revokes every refresh session, then issues a new JWT pair for the current device. Tenant membership is resolved outside the database transaction, before checking the account, pending credential and confirmation code under lock. A tenant or idEncode dependency failure preserves existing sessions and pending enrollment. Tenant errors expose only details[].source=tenant and details[].operation=tenantService.getByUserId; technical context and debug are omitted. idEncode errors expose only details[].source=idEncode and details[].operation=idEncodeService.encodeEntityIdStrict (or idEncodeService.decodeExternalId during bearer verification); technical context and debug are omitted.
       security:
         - bearerAuth: []
       requestBody:
@@ -3309,13 +3772,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/StandardErrorResponse'
         '500':
-          description: TOTP secret decryption or internal 2FA processing failed (TWOFA_INTERNAL_ERROR); Tenant port configuration, response contract or invocation failed (DEPENDENCY_CONFIGURATION_ERROR, DEPENDENCY_CONTRACT_VIOLATION, DEPENDENCY_FAILED)
+          description: TOTP secret decryption or internal 2FA processing failed (TWOFA_INTERNAL_ERROR); Tenant or idEncode port configuration, response contract or invocation failed (DEPENDENCY_CONFIGURATION_ERROR, DEPENDENCY_CONTRACT_VIOLATION, DEPENDENCY_FAILED)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/StandardErrorResponse'
         '503':
-          description: Tenant membership is temporarily unavailable (DEPENDENCY_UNAVAILABLE)
+          description: Tenant membership or idEncode token claim processing is temporarily unavailable (DEPENDENCY_UNAVAILABLE)
           content:
             application/json:
               schema:
@@ -6466,19 +6929,19 @@ paths:
               schema:
                 $ref: '#/components/schemas/StandardErrorResponse'
         '404':
-          description: Project not found
+          description: NOT_FOUND for invalid encoded IDs in path/query/body; PROJECT_NOT_FOUND for a decoded missing or invisible project.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/StandardErrorResponse'
         '500':
-          description: DEPENDENCY_CONFIGURATION_ERROR, DEPENDENCY_CONTRACT_VIOLATION or DEPENDENCY_FAILED. Source services; operation serviceCatalogService.describeMany, required for nonempty search or catalog_name sorting. Own-field pages do not call this port. No partial list is returned.
+          description: DEPENDENCY_CONFIGURATION_ERROR, DEPENDENCY_CONTRACT_VIOLATION or DEPENDENCY_FAILED. Source services; operation serviceCatalogService.describeMany, required for nonempty search or catalog_name sorting. Every nonempty page additionally calls serviceCatalogService.describeManyForHttp for the masked catalog context. No partial list is returned.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/StandardErrorResponse'
         '503':
-          description: DEPENDENCY_UNAVAILABLE. Source services; operation serviceCatalogService.describeMany, required for nonempty search or catalog_name sorting. Own-field pages do not call this port.
+          description: DEPENDENCY_UNAVAILABLE. Source services; operation serviceCatalogService.describeMany, required for nonempty search or catalog_name sorting. Every nonempty page additionally calls serviceCatalogService.describeManyForHttp for the masked catalog context.
           content:
             application/json:
               schema:
@@ -6487,7 +6950,7 @@ paths:
         - Projects
     post:
       summary: Add project service declaration
-      description: Declare a supported service requirement for a project.
+      description: Create a declaration from an active public catalog entry. Requires tenant owner/admin. Server applies template defaults and generates values atomically.
       operationId: projectServiceDeclarationAdd
       parameters:
         - name: projectId
@@ -6528,19 +6991,19 @@ paths:
               schema:
                 $ref: '#/components/schemas/StandardErrorResponse'
         '404':
-          description: Project not found
+          description: NOT_FOUND for invalid encoded IDs in path/query/body; PROJECT_NOT_FOUND for a decoded missing or invisible project.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/StandardErrorResponse'
         '409':
-          description: Service declaration conflict
+          description: PROJECT_SERVICE_DECLARATION_CONFLICT — alias is occupied in this project (including races), or the project declaration limit is reached.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/StandardErrorResponse'
         '422':
-          description: VALIDATION_ERROR or SERVICE_DECLARATION_INVALID when the services catalog confirms an unknown or inactive service, or declaration parameters are invalid.
+          description: VALIDATION_ERROR for top-level structure, alias syntax or forbidden ${{ expressions (including server defaults). SERVICE_DECLARATION_INVALID for params/env_vars structure, version/image, immutable binding, row ownership, secret/generated rules, template binding or options charset. Creation additionally requires an active public entry. All details[].field values are JSON pointers from the request root, e.g. /params/env_vars/0/value. Errors never contain secret values or defaults.
           content:
             application/json:
               schema:
@@ -6552,9 +7015,62 @@ paths:
       tags:
         - Projects
   /projects/{projectId}/services/{declId}:
+    get:
+      summary: Get project service declaration
+      description: Detail with masked ENV rows and full catalog editing context, including deprecated/platform entries. Requires tenant owner/admin.
+      operationId: projectServiceDeclarationGet
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/ProjectId'
+        - name: declId
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/ProjectServiceDeclarationId'
+      responses:
+        '200':
+          description: Masked declaration with full catalog editing context
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/StandardResponse'
+                  - type: object
+                    required:
+                      - data
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/ProjectServiceDeclarationResponseData'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+        '403':
+          description: Tenant context required or forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+        '404':
+          description: NOT_FOUND for invalid encoded IDs in path/query/body; PROJECT_NOT_FOUND for a decoded missing or invisible project/declaration.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+        '500':
+          $ref: '#/components/responses/ProjectServiceCatalogDependencyError'
+        '503':
+          $ref: '#/components/responses/ProjectServiceCatalogDependencyUnavailable'
+      tags:
+        - Projects
     patch:
       summary: Update project service declaration
-      description: Update a project service declaration and revalidate params.
+      description: Update a declaration as tenant owner/admin. Deprecated and platform entries remain editable; version selection is validated only when its value changes. env_vars is a full replacement by row id.
       operationId: projectServiceDeclarationUpdate
       parameters:
         - name: projectId
@@ -6600,19 +7116,19 @@ paths:
               schema:
                 $ref: '#/components/schemas/StandardErrorResponse'
         '404':
-          description: Project or service declaration not found
+          description: NOT_FOUND for invalid encoded IDs in path/query/body; PROJECT_NOT_FOUND for a decoded missing or invisible project/declaration.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/StandardErrorResponse'
         '409':
-          description: Service declaration conflict
+          description: PROJECT_SERVICE_DECLARATION_CONFLICT — alias is occupied in this project (including races), or the project declaration limit is reached.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/StandardErrorResponse'
         '422':
-          description: VALIDATION_ERROR or SERVICE_DECLARATION_INVALID when the services catalog confirms an unknown or inactive service, or declaration parameters are invalid.
+          description: VALIDATION_ERROR for top-level structure, alias syntax or forbidden ${{ expressions (including server defaults). SERVICE_DECLARATION_INVALID for params/env_vars structure, version/image, immutable binding, row ownership, secret/generated rules, template binding or options charset. Creation additionally requires an active public entry. All details[].field values are JSON pointers from the request root, e.g. /params/env_vars/0/value. Errors never contain secret values or defaults.
           content:
             application/json:
               schema:
@@ -6654,7 +7170,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/StandardErrorResponse'
         '404':
-          description: Project or service declaration not found
+          description: NOT_FOUND for invalid encoded IDs in path/query/body; PROJECT_NOT_FOUND for a decoded missing or invisible project/declaration.
           content:
             application/json:
               schema:
@@ -13502,6 +14018,262 @@ components:
           $ref: '#/components/schemas/AccountSettingsAudioSettingsPatch'
         notifications:
           $ref: '#/components/schemas/AccountSettingsNotificationSettingsPatch'
+    AgentServiceDeclarationId:
+      type: string
+      description: Agent service declaration identifier (prefix "asd")
+      pattern: ^asd_[a-zA-Z0-9]{6,}$
+      example: asd_aB3xYz
+    AgentServiceAlias:
+      type: string
+      minLength: 1
+      maxLength: 63
+      description: DNS label; full-string PCRE \A[a-z]([a-z0-9-]{0,61}[a-z0-9])?\z. Unique within the scope, regardless of catalog entry.
+      example: mysql
+    AgentServiceEnvRow:
+      type: object
+      required:
+        - id
+        - key
+        - value
+        - is_secret
+        - is_generated
+        - template_key
+        - is_renamed
+      properties:
+        id:
+          $ref: '#/components/schemas/EnvVarId'
+        key:
+          type: string
+          maxLength: 255
+          description: Full-string PCRE \A[A-Za-z_][A-Za-z0-9_]*\z; unique in this declaration.
+        value:
+          type: string
+          maxLength: 65535
+          description: Secret values are always ***; public values are stored literals.
+        is_secret:
+          type: boolean
+        is_generated:
+          type: boolean
+          readOnly: true
+        template_key:
+          type: string
+          nullable: true
+        is_renamed:
+          type: boolean
+          readOnly: true
+          description: Key differs from the template key name captured at row creation; false for custom rows.
+    AgentServiceEnvWriteRow:
+      type: object
+      description: 'Existing rows match by id belonging to this declaration. A missing or null id creates a new row. Omitted key/value/flags preserve stored values; value *** also preserves the stored value. New custom rows require key and value (is_secret defaults false). New template rows accept template_key and optional key; omitted value applies the server default. New generated rows must omit value and default to is_secret=true regardless of the template flag; existing generated rows accept only omitted value or ***. A new generated row may explicitly set is_secret to false: its fresh server-generated value is public. template_key is immutable for existing rows, even when the template row was removed from the catalog. Making a secret public requires an explicit new value. is_generated, is_renamed and template_origin_key supplied by clients are ignored. Expression syntax ${{ is forbidden in key/value, including defaults.'
+      properties:
+        id:
+          type: string
+          nullable: true
+          description: Existing env_ ID, or null to create a new row.
+          pattern: ^env_[a-zA-Z0-9]{6,}(?![\s\S])
+          example: env_aB3xYz
+        template_key:
+          type: string
+          nullable: true
+        key:
+          type: string
+          maxLength: 255
+        value:
+          type: string
+          maxLength: 65535
+        is_secret:
+          type: boolean
+    AgentServiceParamsResponse:
+      type: object
+      required:
+        - version
+        - use_global_env
+        - env_vars
+      properties:
+        version:
+          type: string
+        use_global_env:
+          type: boolean
+          description: Enables global ENV placeholder resolution by the effective-services resolver (MCP parity). CRUD stores literals. A same-name self-reference such as TOKEN=$TOKEN does not import the global TOKEN.
+        env_vars:
+          type: array
+          maxItems: 64
+          items:
+            $ref: '#/components/schemas/AgentServiceEnvRow'
+    AgentServiceParamsPatch:
+      type: object
+      properties:
+        version:
+          type: string
+          description: On creation or an actual change, must be in current supported_versions with a nonempty image. The saved version is not revalidated when omitted or resubmitted unchanged.
+        use_global_env:
+          type: boolean
+          description: Stores the flag without resolving placeholders; same-name self-references do not import global values.
+        env_vars:
+          type: array
+          maxItems: 64
+          description: Full replacement by row id; omitted rows are deleted. Omitted env_vars preserves the set on PATCH. On POST omission scaffolds the entire template; [] creates no rows. Restoring a template row without id creates a new id and regenerates generated values. Values referenced by options must match the runtime charset unless they contain a $VAR placeholder; final validation belongs to the resolver/renderer.
+          items:
+            $ref: '#/components/schemas/AgentServiceEnvWriteRow'
+    AgentServiceParamsCreate:
+      allOf:
+        - $ref: '#/components/schemas/AgentServiceParamsPatch'
+        - type: object
+          required:
+            - version
+      description: use_global_env defaults to false. Missing template defaults become empty strings; secret defaults stay secret.
+    AgentServiceCatalogSummary:
+      type: object
+      required:
+        - id
+        - code
+        - name
+        - status
+      properties:
+        id:
+          $ref: '#/components/schemas/AgentServiceCatalogEntryId'
+        code:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+          enum:
+            - active
+            - deprecated
+    AgentServiceCatalogContext:
+      allOf:
+        - $ref: '#/components/schemas/AgentServiceCatalogSummary'
+        - type: object
+          required:
+            - supported_versions
+            - env_template
+          properties:
+            supported_versions:
+              type: array
+              description: First element is recommended. Available even for deprecated/platform entries. Legacy migrated identifiers may be null and cannot be selected.
+              items:
+                type: string
+                nullable: true
+            env_template:
+              type: array
+              items:
+                type: object
+                required:
+                  - template_key
+                  - key
+                  - default_value
+                  - is_secret
+                  - is_generated
+                properties:
+                  template_key:
+                    type: string
+                  key:
+                    type: string
+                  default_value:
+                    type: string
+                    nullable: true
+                    description: Secret defaults are always ***. Omit value on creation to apply the original server default.
+                  is_secret:
+                    type: boolean
+                  is_generated:
+                    type: boolean
+    AgentServiceDeclarationRelationData:
+      type: object
+      required:
+        - id
+        - service_catalog_entry_id
+        - alias
+        - params
+        - created_at
+        - updated_at
+        - agent_id
+      properties:
+        id:
+          $ref: '#/components/schemas/AgentServiceDeclarationId'
+        service_catalog_entry_id:
+          $ref: '#/components/schemas/AgentServiceCatalogEntryId'
+        alias:
+          $ref: '#/components/schemas/AgentServiceAlias'
+        params:
+          $ref: '#/components/schemas/AgentServiceParamsResponse'
+        created_at:
+          type: string
+        updated_at:
+          type: string
+        agent_id:
+          $ref: '#/components/schemas/AgentId'
+    AgentServiceDeclarationAddRequestBody:
+      type: object
+      required:
+        - service_catalog_entry_id
+        - alias
+        - params
+      properties:
+        service_catalog_entry_id:
+          $ref: '#/components/schemas/AgentServiceCatalogEntryId'
+        alias:
+          $ref: '#/components/schemas/AgentServiceAlias'
+        params:
+          $ref: '#/components/schemas/AgentServiceParamsCreate'
+    AgentServiceDeclarationUpdateRequestBody:
+      type: object
+      description: All fields optional. Catalog entry binding cannot change; the saved ID may be submitted again.
+      properties:
+        service_catalog_entry_id:
+          $ref: '#/components/schemas/AgentServiceCatalogEntryId'
+        alias:
+          $ref: '#/components/schemas/AgentServiceAlias'
+        params:
+          $ref: '#/components/schemas/AgentServiceParamsPatch'
+    AgentServiceCatalogEntryId:
+      type: string
+      pattern: ^svc_[a-zA-Z0-9]{6,}$
+      example: svc_aB3xYz
+    AgentServiceDeclarationDetail:
+      allOf:
+        - $ref: '#/components/schemas/AgentServiceDeclarationRelationData'
+        - type: object
+          required:
+            - catalog_entry
+          properties:
+            catalog_entry:
+              $ref: '#/components/schemas/AgentServiceCatalogContext'
+    AgentServiceDeclarationListItem:
+      allOf:
+        - $ref: '#/components/schemas/AgentServiceDeclarationRelationData'
+        - type: object
+          required:
+            - catalog_entry
+          properties:
+            catalog_entry:
+              $ref: '#/components/schemas/AgentServiceCatalogSummary'
+    ProjectAgentServiceDeclarationDetail:
+      allOf:
+        - $ref: '#/components/schemas/AgentServiceDeclarationRelationData'
+        - type: object
+          required:
+            - catalog_entry
+            - project_id
+          properties:
+            catalog_entry:
+              $ref: '#/components/schemas/AgentServiceCatalogContext'
+            project_id:
+              type: string
+              pattern: ^prj_[a-zA-Z0-9]{6,}$
+    ProjectAgentServiceDeclarationListItem:
+      allOf:
+        - $ref: '#/components/schemas/AgentServiceDeclarationRelationData'
+        - type: object
+          required:
+            - catalog_entry
+            - project_id
+          properties:
+            catalog_entry:
+              $ref: '#/components/schemas/AgentServiceCatalogSummary'
+            project_id:
+              type: string
+              pattern: ^prj_[a-zA-Z0-9]{6,}$
     AgentId:
       type: string
       description: Agent identifier (prefix "agt")
@@ -17101,39 +17873,209 @@ components:
       type: array
       items:
         $ref: '#/components/schemas/ProjectIntegrationResponseData'
-    ProjectServiceDeclarationResponseData:
+    ProjectServiceAlias:
+      type: string
+      minLength: 1
+      maxLength: 63
+      description: DNS label; full-string PCRE \A[a-z]([a-z0-9-]{0,61}[a-z0-9])?\z. Unique within the project, regardless of catalog entry.
+      example: mysql
+    ProjectServiceEnvRow:
       type: object
-      properties:
-        id:
-          $ref: '#/components/schemas/ProjectServiceDeclarationId'
-        project_id:
-          $ref: '#/components/schemas/ProjectId'
-        service_catalog_entry_id:
-          $ref: '#/components/schemas/ServiceCatalogEntryId'
-        alias:
-          type: string
-          nullable: true
-        params:
-          type: object
-          additionalProperties: true
-        created_at:
-          type: string
-          nullable: true
-        updated_at:
-          type: string
-          nullable: true
       required:
         - id
-        - project_id
+        - key
+        - value
+        - is_secret
+        - is_generated
+        - template_key
+        - is_renamed
+      properties:
+        id:
+          $ref: '#/components/schemas/EnvVarId'
+        key:
+          type: string
+          maxLength: 255
+          description: Full-string PCRE \A[A-Za-z_][A-Za-z0-9_]*\z; unique in this declaration.
+        value:
+          type: string
+          maxLength: 65535
+          description: Secret values are always ***; public values are stored literals.
+        is_secret:
+          type: boolean
+        is_generated:
+          type: boolean
+          readOnly: true
+        template_key:
+          type: string
+          nullable: true
+        is_renamed:
+          type: boolean
+          readOnly: true
+          description: Key differs from the template key name captured at row creation; false for custom rows.
+    ProjectServiceEnvWriteRow:
+      type: object
+      description: 'Existing rows match by id belonging to this declaration. A missing or null id creates a new row. Omitted key/value/flags preserve stored values; value *** also preserves the stored value. New custom rows require key and value (is_secret defaults false). New template rows accept template_key and optional key; omitted value applies the server default. New generated rows must omit value and default to is_secret=true regardless of the template flag; existing generated rows accept only omitted value or ***. A new generated row may explicitly set is_secret to false: its fresh server-generated value is public. template_key is immutable for existing rows, even when the template row was removed from the catalog. Making a secret public requires an explicit new value. is_generated, is_renamed and template_origin_key supplied by clients are ignored. Expression syntax ${{ is forbidden in key/value, including defaults.'
+      properties:
+        id:
+          type: string
+          nullable: true
+          description: Existing env_ ID, or null to create a new row.
+          pattern: ^env_[a-zA-Z0-9]{6,}(?![\s\S])
+          example: env_aB3xYz
+        template_key:
+          type: string
+          nullable: true
+        key:
+          type: string
+          maxLength: 255
+        value:
+          type: string
+          maxLength: 65535
+        is_secret:
+          type: boolean
+    ProjectServiceParamsResponse:
+      type: object
+      required:
+        - version
+        - use_global_env
+        - env_vars
+      properties:
+        version:
+          type: string
+        use_global_env:
+          type: boolean
+          description: Enables global ENV placeholder resolution by the effective-services resolver (MCP parity). CRUD stores literals. A same-name self-reference such as TOKEN=$TOKEN does not import the global TOKEN.
+        env_vars:
+          type: array
+          maxItems: 64
+          items:
+            $ref: '#/components/schemas/ProjectServiceEnvRow'
+    ProjectServiceParamsPatch:
+      type: object
+      properties:
+        version:
+          type: string
+          description: On creation or an actual change, must be in current supported_versions with a nonempty image. The saved version is not revalidated when omitted or resubmitted unchanged.
+        use_global_env:
+          type: boolean
+          description: Stores the flag without resolving placeholders; same-name self-references do not import global values.
+        env_vars:
+          type: array
+          maxItems: 64
+          description: Full replacement by row id; omitted rows are deleted. Omitted env_vars preserves the set on PATCH. On POST omission scaffolds the entire template; [] creates no rows. Restoring a template row without id creates a new id and regenerates generated values. Values referenced by options must match the runtime charset unless they contain a $VAR placeholder; final validation belongs to the resolver/renderer.
+          items:
+            $ref: '#/components/schemas/ProjectServiceEnvWriteRow'
+    ProjectServiceParamsCreate:
+      allOf:
+        - $ref: '#/components/schemas/ProjectServiceParamsPatch'
+        - type: object
+          required:
+            - version
+      description: use_global_env defaults to false. Missing template defaults become empty strings; secret defaults stay secret.
+    ProjectServiceCatalogSummary:
+      type: object
+      required:
+        - id
+        - code
+        - name
+        - status
+      properties:
+        id:
+          $ref: '#/components/schemas/ServiceCatalogEntryId'
+        code:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+          enum:
+            - active
+            - deprecated
+    ProjectServiceCatalogContext:
+      allOf:
+        - $ref: '#/components/schemas/ProjectServiceCatalogSummary'
+        - type: object
+          required:
+            - supported_versions
+            - env_template
+          properties:
+            supported_versions:
+              type: array
+              description: First element is recommended. Available even for deprecated/platform entries. Legacy migrated identifiers may be null and cannot be selected.
+              items:
+                type: string
+                nullable: true
+            env_template:
+              type: array
+              items:
+                type: object
+                required:
+                  - template_key
+                  - key
+                  - default_value
+                  - is_secret
+                  - is_generated
+                properties:
+                  template_key:
+                    type: string
+                  key:
+                    type: string
+                  default_value:
+                    type: string
+                    nullable: true
+                    description: Secret defaults are always ***. Omit value on creation to apply the original server default.
+                  is_secret:
+                    type: boolean
+                  is_generated:
+                    type: boolean
+    ProjectServiceDeclarationRelationData:
+      type: object
+      required:
+        - id
         - service_catalog_entry_id
         - alias
         - params
         - created_at
         - updated_at
+      properties:
+        id:
+          $ref: '#/components/schemas/ProjectServiceDeclarationId'
+        service_catalog_entry_id:
+          $ref: '#/components/schemas/ServiceCatalogEntryId'
+        alias:
+          $ref: '#/components/schemas/ProjectServiceAlias'
+        params:
+          $ref: '#/components/schemas/ProjectServiceParamsResponse'
+        created_at:
+          type: string
+        updated_at:
+          type: string
+    ProjectServiceDeclarationResponseData:
+      allOf:
+        - $ref: '#/components/schemas/ProjectServiceDeclarationRelationData'
+        - type: object
+          required:
+            - project_id
+            - catalog_entry
+          properties:
+            project_id:
+              $ref: '#/components/schemas/ProjectId'
+            catalog_entry:
+              $ref: '#/components/schemas/ProjectServiceCatalogContext'
     ProjectServiceDeclarationListResponseData:
       type: array
       items:
-        $ref: '#/components/schemas/ProjectServiceDeclarationResponseData'
+        allOf:
+          - $ref: '#/components/schemas/ProjectServiceDeclarationRelationData'
+          - type: object
+            required:
+              - project_id
+              - catalog_entry
+            properties:
+              project_id:
+                $ref: '#/components/schemas/ProjectId'
+              catalog_entry:
+                $ref: '#/components/schemas/ProjectServiceCatalogSummary'
     ProjectResponseData:
       type: object
       properties:
@@ -17182,7 +18124,9 @@ components:
         integrations:
           $ref: '#/components/schemas/ProjectIntegrationListResponseData'
         services:
-          $ref: '#/components/schemas/ProjectServiceDeclarationListResponseData'
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectServiceDeclarationRelationData'
       required:
         - id
         - tenant_id
@@ -17342,33 +18286,27 @@ components:
                 - null
     ProjectServiceDeclarationAddRequestBody:
       type: object
-      properties:
-        service_catalog_entry_id:
-          $ref: '#/components/schemas/ServiceCatalogEntryId'
-        alias:
-          $ref: '#/components/schemas/ProjectAlias'
-        params:
-          type: object
-          additionalProperties: true
       required:
         - service_catalog_entry_id
+        - alias
         - params
-    ProjectServiceDeclarationUpdateRequestBody:
-      type: object
       properties:
         service_catalog_entry_id:
           $ref: '#/components/schemas/ServiceCatalogEntryId'
         alias:
-          anyOf:
-            - allOf:
-                - $ref: '#/components/schemas/ProjectAlias'
-            - type: string
-              nullable: true
-              enum:
-                - null
+          $ref: '#/components/schemas/ProjectServiceAlias'
         params:
-          type: object
-          additionalProperties: true
+          $ref: '#/components/schemas/ProjectServiceParamsCreate'
+    ProjectServiceDeclarationUpdateRequestBody:
+      type: object
+      description: All fields optional. Catalog entry binding cannot change; the saved ID may be submitted again.
+      properties:
+        service_catalog_entry_id:
+          $ref: '#/components/schemas/ServiceCatalogEntryId'
+        alias:
+          $ref: '#/components/schemas/ProjectServiceAlias'
+        params:
+          $ref: '#/components/schemas/ProjectServiceParamsPatch'
     ProjectPullRequestStatus:
       type: string
       enum:
@@ -18167,7 +19105,6 @@ components:
         - id
         - agent_id
         - iteration_id
-        - lane_key
         - execution_status
         - representations
         - artifact_count
@@ -18183,8 +19120,6 @@ components:
           nullable: true
         iteration_id:
           $ref: '#/components/schemas/TaskIterationId'
-        lane_key:
-          type: string
         execution_status:
           $ref: '#/components/schemas/TaskExecutionStatus'
         representations:
@@ -23466,6 +24401,42 @@ components:
         type: string
         maxLength: 120
   responses:
+    ProjectAgentServiceForbidden:
+      description: 'Tenant middleware rejected the request: TENANT_REQUIRED for missing tenant context, TENANT_INACTIVE for an inactive tenant, or FORBIDDEN when the token tenant does not match the current membership. Denied project access returns 404 PROJECT_NOT_FOUND.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/StandardErrorResponse'
+    AgentServiceForbidden:
+      description: 'Owner contour and clone: member receives FORBIDDEN for another creator or a read-only agent; owner/admin/superadmin receives AGENT_NOT_EDITABLE on a read-only connection. Applies to reading and writing. Missing tenant context uses tenant middleware errors.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/StandardErrorResponse'
+    AgentServiceNotFound:
+      description: AGENT_NOT_FOUND, ASSIGNMENT_NOT_FOUND, PROJECT_NOT_FOUND (including denied project membership), AGENT_SERVICE_DECLARATION_NOT_FOUND for a declaration outside the resolved scope, or NOT_FOUND for malformed or wrong-entity opaque IDs. An owner deleted before a protected write also returns 404.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/StandardErrorResponse'
+    AgentServiceConflict:
+      description: 'AGENT_SERVICE_DECLARATION_CONFLICT: alias already exists in this scope or the scope limit (default 32) is reached.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/StandardErrorResponse'
+    AgentServiceInvalid:
+      description: VALIDATION_ERROR for invalid request structure, non-object params, alias pattern or expressions ${{ in env keys/values. SERVICE_DECLARATION_INVALID for version, catalog availability (including concurrent catalog deletion), env structure/identity, immutable bindings, generated values, invalid masks or options literals. details[].field is a JSON-pointer rooted at the request body; unavailable catalog entry points to /service_catalog_entry_id. Error details never include secrets.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/StandardErrorResponse'
+    AgentServiceDependencyFailure:
+      description: 'DEPENDENCY_CONTRACT_VIOLATION: catalog port returned an invalid projection, including an unmasked secret default.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/StandardErrorResponse'
     AgentProjectAccessDependencyUnavailable:
       description: DEPENDENCY_UNAVAILABLE. Project access uses source tenant, operation tenantService.getMemberRole. A failed lookup stops the request before agent configuration is read or changed. Public details contain only source and operation; no upstream payload or debug metadata is returned.
       content:
@@ -23695,7 +24666,7 @@ components:
         (port or mandatory method unavailable), DEPENDENCY_CONTRACT_VIOLATION
         (invalid catalog response or undocumented owner 4xx), DEPENDENCY_FAILED
         (other owner failure). Safe details identify source=services and
-        operation=serviceCatalogService.getActive. Technical context and debug are never published.
+        operation=serviceCatalogService.getActive, get, describeMany or describeManyForHttp. Technical context and debug are never published.
       content:
         application/json:
           schema:
@@ -23711,7 +24682,7 @@ components:
     ProjectServiceCatalogDependencyUnavailable:
       description: |-
         DEPENDENCY_UNAVAILABLE: the mandatory service catalog lookup signalled unavailability.
-        Safe details identify source=services and operation=serviceCatalogService.getActive.
+        Safe details identify source=services and the failed serviceCatalogService operation (getActive, get, describeMany or describeManyForHttp).
         Technical context and debug are never published.
       content:
         application/json:
