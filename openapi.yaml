@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: SynthStack Backend API
-  version: v2.19.0+20807
+  version: v2.20.0+20916
   contact:
     name: SynthStack
     url: https://synthstack.ai
@@ -19800,7 +19800,7 @@ components:
           items:
             type: string
             nullable: true
-          description: Ordered identifiers derived from versions; untouched migrated identifiers may include null or values outside the current input constraints.
+          description: Ordered identifiers derived from non-suspended versions only; untouched migrated identifiers may include null or values outside the current input constraints.
         status:
           $ref: '#/components/schemas/ServiceCatalogStatus'
         created_at:
@@ -19828,7 +19828,7 @@ components:
         - created_at
         - updated_at
         - env_template
-      description: Shared catalog fields with secret defaults masked. Public responses contain these fields only; admin responses also include visibility and versions with images/options.
+      description: Shared catalog fields with secret defaults masked. Public responses contain these fields only; admin responses also include visibility, informational port and all versions with runtime presets.
     ServiceCatalogListResponseData:
       type: array
       items:
