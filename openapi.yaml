@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: SynthStack Backend API
-  version: v2.20.0+20916
+  version: v2.21.0+21045
   contact:
     name: SynthStack
     url: https://synthstack.ai
@@ -928,6 +928,18 @@ paths:
           $ref: '#/components/responses/AgentConflict'
         '422':
           $ref: '#/components/responses/AgentValidationError'
+        '500':
+          description: DEPENDENCY_CONFIGURATION_ERROR, DEPENDENCY_CONTRACT_VIOLATION or DEPENDENCY_FAILED. Quota lookup uses details[].source tenant and operation quotaService.getQuotas; failure stops the operation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+        '503':
+          description: DEPENDENCY_UNAVAILABLE. Quota lookup uses details[].source tenant and operation quotaService.getQuotas; failure stops the operation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
       tags:
         - Agent
   /agents/stats:
@@ -1038,8 +1050,18 @@ paths:
           $ref: '#/components/responses/AgentConflict'
         '422':
           $ref: '#/components/responses/AgentValidationError'
+        '500':
+          description: DEPENDENCY_CONFIGURATION_ERROR, DEPENDENCY_CONTRACT_VIOLATION or DEPENDENCY_FAILED. Quota lookup uses details[].source tenant and operation quotaService.getQuotas; failure stops the operation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
         '503':
-          $ref: '#/components/responses/AgentSkillUnavailable'
+          description: SKILL_LIBRARY_UNAVAILABLE for a failed skill-library call, SKILL_DOWNLOAD_UNAVAILABLE when the download signer fails, or DEPENDENCY_UNAVAILABLE from quota lookup (details[].source tenant, operation quotaService.getQuotas). Failure stops the operation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
       tags:
         - Agent
   /agents/{agentId}/projects:
@@ -2848,6 +2870,18 @@ paths:
           $ref: '#/components/responses/AgentConflict'
         '422':
           $ref: '#/components/responses/AgentValidationError'
+        '500':
+          description: DEPENDENCY_CONFIGURATION_ERROR, DEPENDENCY_CONTRACT_VIOLATION or DEPENDENCY_FAILED. Quota lookup uses details[].source tenant and operation quotaService.getQuotas; failure stops the operation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+        '503':
+          description: DEPENDENCY_UNAVAILABLE. Quota lookup uses details[].source tenant and operation quotaService.getQuotas; failure stops the operation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
       tags:
         - Agent
       description: Use marketplace template
@@ -24548,12 +24582,15 @@ components:
           type: integer
         max_integrations:
           type: integer
+        max_agents:
+          type: integer
       required:
         - plan
         - max_disk_gb
         - max_users
         - max_runners
         - max_integrations
+        - max_agents
     TenantContextData:
       type: object
       properties:
@@ -24753,6 +24790,10 @@ components:
               allOf:
                 - $ref: '#/components/schemas/TenantQuotaUsageItem'
               description: Runner usage currently reports zero.
+            agents:
+              allOf:
+                - $ref: '#/components/schemas/TenantQuotaUsageItem'
+              description: Agent usage currently reports zero.
             integrations:
               $ref: '#/components/schemas/TenantQuotaUsageItem'
           required:
@@ -24760,6 +24801,7 @@ components:
             - users
             - runners
             - integrations
+            - agents
         period:
           $ref: '#/components/schemas/TenantQuotaPeriod'
       required:
