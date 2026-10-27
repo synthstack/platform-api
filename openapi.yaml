@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: SynthStack Backend API
-  version: v2.21.0+21045
+  version: v2.22.0+21302
   contact:
     name: SynthStack
     url: https://synthstack.ai
@@ -13794,8 +13794,8 @@ paths:
                 slug:
                   type: string
                   minLength: 2
-                  maxLength: 100
-                  pattern: ^[a-z0-9-]+$
+                  maxLength: 64
+                  pattern: ^[a-z0-9]+(-[a-z0-9]+)*(?![\s\S])
                   example: acme-inc
                 billing_email:
                   type: string
@@ -15165,6 +15165,12 @@ components:
                 - null
         model:
           type: string
+        runtime:
+          type: string
+          nullable: true
+          minLength: 1
+          maxLength: 64
+          description: Base agent runtime label; null when unset. Always present in full CRUD payloads, omitted from batch directory descriptors. Shared across tenants and projects without overrides. Independent of project runtime and runtime files.
         model_params:
           type: object
           nullable: true
@@ -15706,10 +15712,17 @@ components:
         - active
         - custom
         - marketplace
+    AgentResponseData:
+      description: Full agent payload returned by CRUD and clone operations, including an explicit null when runtime is unset.
+      allOf:
+        - $ref: '#/components/schemas/Agent'
+        - type: object
+          required:
+            - runtime
     AgentListResponseData:
       type: array
       items:
-        $ref: '#/components/schemas/Agent'
+        $ref: '#/components/schemas/AgentResponseData'
     AgentProjectsResponseData:
       type: array
       items:
@@ -15761,7 +15774,7 @@ components:
             - data
           properties:
             data:
-              $ref: '#/components/schemas/Agent'
+              $ref: '#/components/schemas/AgentResponseData'
     AgentListResponse:
       allOf:
         - $ref: '#/components/schemas/StandardResponse'
@@ -19030,8 +19043,8 @@ components:
           description: Maximum 1000 bytes under the default max_description_length setting.
         slug:
           type: string
-          maxLength: 200
-          pattern: ^[a-z0-9][a-z0-9-]*$
+          maxLength: 64
+          pattern: ^[a-z0-9]+(-[a-z0-9]+)*(?![\s\S])
         project_type:
           $ref: '#/components/schemas/ProjectType'
         runtime:
@@ -19082,8 +19095,8 @@ components:
           description: Maximum 1000 bytes under the default max_description_length setting.
         slug:
           type: string
-          maxLength: 200
-          pattern: ^[a-z0-9][a-z0-9-]*$
+          maxLength: 64
+          pattern: ^[a-z0-9]+(-[a-z0-9]+)*(?![\s\S])
         project_type:
           $ref: '#/components/schemas/ProjectType'
         runtime:
@@ -21089,6 +21102,18 @@ components:
           minimum: 0
       required:
         - total
+    TaskSourceResponseData:
+      type: object
+      nullable: true
+      description: Historical origin of a task created from an agent message. The source task may be closed or deleted, and the referenced IDs are not guaranteed to resolve. Both references are immutable after creation.
+      properties:
+        task_id:
+          $ref: '#/components/schemas/TaskId'
+        activity_id:
+          $ref: '#/components/schemas/TaskActivityId'
+      required:
+        - task_id
+        - activity_id
     TaskListItemResponseData:
       type: object
       properties:
@@ -21098,6 +21123,8 @@ components:
           $ref: '#/components/schemas/TenantId'
         project_id:
           $ref: '#/components/schemas/ProjectId'
+        source:
+          $ref: '#/components/schemas/TaskSourceResponseData'
         number:
           type: integer
           minimum: 1
@@ -21172,6 +21199,7 @@ components:
         - closed_by
         - labels
         - executors
+        - source
         - publication
     TaskResponseData:
       allOf:
@@ -23492,6 +23520,15 @@ components:
     TaskCreateRequestBody:
       type: object
       properties:
+        source_activity_id:
+          description: Agent message from a non-deleted task in the same project and tenant. Omitted and null values are equivalent. Invalid sources return 422 VALIDATION_ERROR with details[].field = source_activity_id before creation. Source validity is checked once before the creation transaction; deletion after that check does not prevent creation of the historical reference.
+          anyOf:
+            - allOf:
+                - $ref: '#/components/schemas/TaskActivityId'
+            - type: string
+              nullable: true
+              enum:
+                - null
         title:
           type: string
           maxLength: 200
@@ -26193,6 +26230,11 @@ components:
               model:
                 type: string
                 maxLength: 255
+              runtime:
+                type: string
+                minLength: 1
+                maxLength: 64
+                description: Runtime from GET /projects/runtimes. Trimmed and nonempty; omission leaves it unset. Unsupported values return VALIDATION_ERROR with runtime field details listing supported values.
               model_params:
                 type: object
                 nullable: true
@@ -26228,6 +26270,8 @@ components:
               - required:
                   - model
               - required:
+                  - runtime
+              - required:
                   - model_params
               - required:
                   - role_id
@@ -26254,6 +26298,12 @@ components:
               model:
                 type: string
                 maxLength: 255
+              runtime:
+                type: string
+                nullable: true
+                minLength: 1
+                maxLength: 64
+                description: Base runtime from GET /projects/runtimes. Trimmed and nonempty; explicit null clears it, omission preserves it. No tenant or project overrides.
               model_params:
                 type: object
                 nullable: true
