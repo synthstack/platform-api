@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: SynthStack Backend API
-  version: v2.22.0+21302
+  version: v2.23.0+21709
   contact:
     name: SynthStack
     url: https://synthstack.ai
@@ -27,6 +27,8 @@ tags:
     description: Automation operations.
   - name: Billing
     description: Billing operations.
+  - name: Bug Reports
+    description: Bug Reports operations.
   - name: Feedback
     description: Feedback operations.
   - name: Integrations
@@ -176,7 +178,7 @@ paths:
   /agents/{agentId}/services:
     get:
       summary: List agent owner service declarations
-      description: 'All operations, including GET, require requireTenantAgent and assertCanMutate: owner/admin/superadmin with an editable connection, or the member who created the editable agent. Marketplace consumers cannot read this layer. Only superadmins can create declarations from platform catalog entries. Existing declarations remain readable, editable and removable after catalog deprecation or public-to-platform changes. Secret row values and template defaults are masked as ***. No runtime resolution is performed. Stable order: created_at DESC, id DESC. No server search or custom sorting.'
+      description: 'All operations, including GET, require requireTenantAgent and assertCanMutateBaseScope: owner/admin/superadmin with an editable connection, or the member who created the editable agent. Non-superadmins also require is_gov=true. Marketplace consumers cannot read this layer. Only superadmins can create declarations from platform catalog entries. Existing declarations remain readable, editable and removable after catalog deprecation or public-to-platform changes. Secret row values and template defaults are masked as ***. No runtime resolution is performed. Stable order: created_at DESC, id DESC. No server search or custom sorting.'
       operationId: agentServiceList
       security:
         - bearerAuth: []
@@ -230,7 +232,7 @@ paths:
         '401':
           $ref: '#/components/responses/AgentUnauthorized'
         '403':
-          $ref: '#/components/responses/AgentServiceForbidden'
+          $ref: '#/components/responses/AgentBaseScopeMutationForbidden'
         '404':
           $ref: '#/components/responses/AgentServiceNotFound'
         '422':
@@ -241,7 +243,7 @@ paths:
         - Agent
     post:
       summary: Create agent owner service declaration
-      description: 'All operations, including GET, require requireTenantAgent and assertCanMutate: owner/admin/superadmin with an editable connection, or the member who created the editable agent. Marketplace consumers cannot read this layer. Only superadmins can create declarations from platform catalog entries. Existing declarations remain readable, editable and removable after catalog deprecation or public-to-platform changes. Secret row values and template defaults are masked as ***. No runtime resolution is performed.'
+      description: 'All operations, including GET, require requireTenantAgent and assertCanMutateBaseScope: owner/admin/superadmin with an editable connection, or the member who created the editable agent. Non-superadmins also require is_gov=true. Marketplace consumers cannot read this layer. Only superadmins can create declarations from platform catalog entries. Existing declarations remain readable, editable and removable after catalog deprecation or public-to-platform changes. Secret row values and template defaults are masked as ***. No runtime resolution is performed.'
       operationId: agentServiceCreate
       security:
         - bearerAuth: []
@@ -270,7 +272,7 @@ paths:
         '401':
           $ref: '#/components/responses/AgentUnauthorized'
         '403':
-          $ref: '#/components/responses/AgentServiceForbidden'
+          $ref: '#/components/responses/AgentBaseScopeMutationForbidden'
         '404':
           $ref: '#/components/responses/AgentServiceNotFound'
         '409':
@@ -284,7 +286,7 @@ paths:
   /agents/{agentId}/services/{declId}:
     get:
       summary: Get agent owner service declaration
-      description: 'All operations, including GET, require requireTenantAgent and assertCanMutate: owner/admin/superadmin with an editable connection, or the member who created the editable agent. Marketplace consumers cannot read this layer. Only superadmins can create declarations from platform catalog entries. Existing declarations remain readable, editable and removable after catalog deprecation or public-to-platform changes. Secret row values and template defaults are masked as ***. No runtime resolution is performed.'
+      description: 'All operations, including GET, require requireTenantAgent and assertCanMutateBaseScope: owner/admin/superadmin with an editable connection, or the member who created the editable agent. Non-superadmins also require is_gov=true. Marketplace consumers cannot read this layer. Only superadmins can create declarations from platform catalog entries. Existing declarations remain readable, editable and removable after catalog deprecation or public-to-platform changes. Secret row values and template defaults are masked as ***. No runtime resolution is performed.'
       operationId: agentServiceGet
       security:
         - bearerAuth: []
@@ -312,7 +314,7 @@ paths:
         '401':
           $ref: '#/components/responses/AgentUnauthorized'
         '403':
-          $ref: '#/components/responses/AgentServiceForbidden'
+          $ref: '#/components/responses/AgentBaseScopeMutationForbidden'
         '404':
           $ref: '#/components/responses/AgentServiceNotFound'
         '422':
@@ -323,7 +325,7 @@ paths:
         - Agent
     patch:
       summary: Update agent owner service declaration
-      description: 'All operations, including GET, require requireTenantAgent and assertCanMutate: owner/admin/superadmin with an editable connection, or the member who created the editable agent. Marketplace consumers cannot read this layer. Only superadmins can create declarations from platform catalog entries. Existing declarations remain readable, editable and removable after catalog deprecation or public-to-platform changes. Secret row values and template defaults are masked as ***. No runtime resolution is performed.'
+      description: 'All operations, including GET, require requireTenantAgent and assertCanMutateBaseScope: owner/admin/superadmin with an editable connection, or the member who created the editable agent. Non-superadmins also require is_gov=true. Marketplace consumers cannot read this layer. Only superadmins can create declarations from platform catalog entries. Existing declarations remain readable, editable and removable after catalog deprecation or public-to-platform changes. Secret row values and template defaults are masked as ***. No runtime resolution is performed.'
       operationId: agentServiceUpdate
       security:
         - bearerAuth: []
@@ -357,7 +359,7 @@ paths:
         '401':
           $ref: '#/components/responses/AgentUnauthorized'
         '403':
-          $ref: '#/components/responses/AgentServiceForbidden'
+          $ref: '#/components/responses/AgentBaseScopeMutationForbidden'
         '404':
           $ref: '#/components/responses/AgentServiceNotFound'
         '409':
@@ -370,7 +372,7 @@ paths:
         - Agent
     delete:
       summary: Delete agent owner service declaration
-      description: 'All operations, including GET, require requireTenantAgent and assertCanMutate: owner/admin/superadmin with an editable connection, or the member who created the editable agent. Marketplace consumers cannot read this layer. Only superadmins can create declarations from platform catalog entries. Existing declarations remain readable, editable and removable after catalog deprecation or public-to-platform changes. Secret row values and template defaults are masked as ***. No runtime resolution is performed.'
+      description: 'All operations, including GET, require requireTenantAgent and assertCanMutateBaseScope: owner/admin/superadmin with an editable connection, or the member who created the editable agent. Non-superadmins also require is_gov=true. Marketplace consumers cannot read this layer. Only superadmins can create declarations from platform catalog entries. Existing declarations remain readable, editable and removable after catalog deprecation or public-to-platform changes. Secret row values and template defaults are masked as ***. No runtime resolution is performed.'
       operationId: agentServiceDelete
       security:
         - bearerAuth: []
@@ -387,7 +389,7 @@ paths:
         '401':
           $ref: '#/components/responses/AgentUnauthorized'
         '403':
-          $ref: '#/components/responses/AgentServiceForbidden'
+          $ref: '#/components/responses/AgentBaseScopeMutationForbidden'
         '404':
           $ref: '#/components/responses/AgentServiceNotFound'
         '422':
@@ -1115,7 +1117,7 @@ paths:
         '401':
           $ref: '#/components/responses/AgentUnauthorized'
         '403':
-          $ref: '#/components/responses/AgentForbidden'
+          $ref: '#/components/responses/AgentBaseScopeReadForbidden'
         '404':
           $ref: '#/components/responses/AgentNotFound'
       tags:
@@ -1138,7 +1140,7 @@ paths:
         '401':
           $ref: '#/components/responses/AgentUnauthorized'
         '403':
-          $ref: '#/components/responses/AgentForbidden'
+          $ref: '#/components/responses/AgentBaseScopeMutationForbidden'
         '404':
           $ref: '#/components/responses/AgentNotFound'
         '422':
@@ -1163,7 +1165,7 @@ paths:
         '401':
           $ref: '#/components/responses/AgentUnauthorized'
         '403':
-          $ref: '#/components/responses/AgentForbidden'
+          $ref: '#/components/responses/AgentBaseScopeMutationForbidden'
         '404':
           $ref: '#/components/responses/AgentNotFound'
         '422':
@@ -1182,7 +1184,7 @@ paths:
         '401':
           $ref: '#/components/responses/AgentUnauthorized'
         '403':
-          $ref: '#/components/responses/AgentForbidden'
+          $ref: '#/components/responses/AgentBaseScopeMutationForbidden'
         '404':
           $ref: '#/components/responses/AgentNotFound'
       tags:
@@ -1192,8 +1194,13 @@ paths:
       summary: Get effective agent profile
       description: |
         Resolve the runtime profile for an agent from engine defaults, agent overrides,
-        and tenant-agent overrides. Returns the effective value, raw layer inputs, and
-        the winning source layer for every profile leaf.
+        and tenant-agent overrides. Returns the effective value, layer inputs subject to base-scope
+        redaction, and the winning source layer for every profile leaf.
+        layers.agent is null unless the caller is a superadmin or the tenant is gov with an editable
+        connection. If is_gov cannot be confirmed, only layers.agent is hidden. The merged profile,
+        inheritance.chain/sources/layers_present and other layers are unchanged. This policy adds
+        no errors; existing middleware, membership, assignment and calculation errors still propagate,
+        including ENGINE_CONFIG_NOT_FOUND. Redaction occurs only after successful calculation.
       operationId: agentProfileEffectiveGet
       parameters:
         - $ref: '#/components/parameters/AgentIdPath'
@@ -1423,8 +1430,12 @@ paths:
       description: |
         Resolve the runtime profile for a project assignment from engine defaults,
         project, agent, tenant-agent, and project-assignment layers. Returns the
-        effective value, normalized raw layer inputs, and the winning source layer
-        for every profile leaf.
+        effective value, normalized layer inputs subject to base-scope redaction, and the winning source
+        layer for every profile leaf. layers.agent is null unless the caller is a superadmin or the
+        tenant is gov with an editable connection, also when is_gov cannot be confirmed. The merged
+        profile, inheritance.chain/sources/layers_present and other layers are unchanged. This policy
+        adds no errors; existing middleware, membership, assignment and calculation errors still
+        propagate, including ENGINE_CONFIG_NOT_FOUND. Redaction follows successful calculation.
       operationId: projectAgentProfileEffectiveGet
       parameters:
         - $ref: '#/components/parameters/ProjectIdPath'
@@ -1471,7 +1482,7 @@ paths:
         '401':
           $ref: '#/components/responses/AgentUnauthorized'
         '403':
-          $ref: '#/components/responses/AgentForbidden'
+          $ref: '#/components/responses/AgentBaseScopeReadForbidden'
         '404':
           $ref: '#/components/responses/AgentNotFound'
       tags:
@@ -1494,7 +1505,7 @@ paths:
         '401':
           $ref: '#/components/responses/AgentUnauthorized'
         '403':
-          $ref: '#/components/responses/AgentForbidden'
+          $ref: '#/components/responses/AgentBaseScopeMutationForbidden'
         '404':
           $ref: '#/components/responses/AgentNotFound'
         '409':
@@ -1523,7 +1534,7 @@ paths:
         '401':
           $ref: '#/components/responses/AgentUnauthorized'
         '403':
-          $ref: '#/components/responses/AgentForbidden'
+          $ref: '#/components/responses/AgentBaseScopeMutationForbidden'
         '404':
           $ref: '#/components/responses/AgentNotFound'
         '409':
@@ -1545,7 +1556,7 @@ paths:
         '401':
           $ref: '#/components/responses/AgentUnauthorized'
         '403':
-          $ref: '#/components/responses/AgentForbidden'
+          $ref: '#/components/responses/AgentBaseScopeMutationForbidden'
         '404':
           $ref: '#/components/responses/AgentNotFound'
       tags:
@@ -1779,7 +1790,7 @@ paths:
         '401':
           $ref: '#/components/responses/AgentUnauthorized'
         '403':
-          $ref: '#/components/responses/AgentForbidden'
+          $ref: '#/components/responses/AgentBaseScopeReadForbidden'
         '404':
           $ref: '#/components/responses/AgentNotFound'
       tags:
@@ -1802,7 +1813,7 @@ paths:
         '401':
           $ref: '#/components/responses/AgentUnauthorized'
         '403':
-          $ref: '#/components/responses/AgentForbidden'
+          $ref: '#/components/responses/AgentBaseScopeMutationForbidden'
         '404':
           $ref: '#/components/responses/AgentNotFound'
         '409':
@@ -1831,7 +1842,7 @@ paths:
         '401':
           $ref: '#/components/responses/AgentUnauthorized'
         '403':
-          $ref: '#/components/responses/AgentForbidden'
+          $ref: '#/components/responses/AgentBaseScopeMutationForbidden'
         '404':
           $ref: '#/components/responses/AgentNotFound'
         '409':
@@ -1853,7 +1864,7 @@ paths:
         '401':
           $ref: '#/components/responses/AgentUnauthorized'
         '403':
-          $ref: '#/components/responses/AgentForbidden'
+          $ref: '#/components/responses/AgentBaseScopeMutationForbidden'
         '404':
           $ref: '#/components/responses/AgentNotFound'
       tags:
@@ -2087,7 +2098,7 @@ paths:
         '401':
           $ref: '#/components/responses/AgentUnauthorized'
         '403':
-          $ref: '#/components/responses/AgentForbidden'
+          $ref: '#/components/responses/AgentBaseScopeReadForbidden'
         '404':
           $ref: '#/components/responses/AgentNotFound'
       tags:
@@ -2110,7 +2121,7 @@ paths:
         '401':
           $ref: '#/components/responses/AgentUnauthorized'
         '403':
-          $ref: '#/components/responses/AgentForbidden'
+          $ref: '#/components/responses/AgentBaseScopeMutationForbidden'
         '404':
           $ref: '#/components/responses/AgentNotFound'
         '409':
@@ -2137,7 +2148,7 @@ paths:
         '401':
           $ref: '#/components/responses/AgentUnauthorized'
         '403':
-          $ref: '#/components/responses/AgentForbidden'
+          $ref: '#/components/responses/AgentBaseScopeMutationForbidden'
         '404':
           $ref: '#/components/responses/AgentNotFound'
         '422':
@@ -2164,7 +2175,7 @@ paths:
         '401':
           $ref: '#/components/responses/AgentUnauthorized'
         '403':
-          $ref: '#/components/responses/AgentForbidden'
+          $ref: '#/components/responses/AgentBaseScopeMutationForbidden'
         '404':
           $ref: '#/components/responses/AgentNotFound'
         '409':
@@ -2186,7 +2197,7 @@ paths:
         '401':
           $ref: '#/components/responses/AgentUnauthorized'
         '403':
-          $ref: '#/components/responses/AgentForbidden'
+          $ref: '#/components/responses/AgentBaseScopeMutationForbidden'
         '404':
           $ref: '#/components/responses/AgentNotFound'
       tags:
@@ -2475,7 +2486,7 @@ paths:
         '401':
           $ref: '#/components/responses/AgentUnauthorized'
         '403':
-          $ref: '#/components/responses/AgentForbidden'
+          $ref: '#/components/responses/AgentBaseScopeReadForbidden'
         '404':
           $ref: '#/components/responses/AgentNotFound'
       tags:
@@ -2498,7 +2509,7 @@ paths:
         '401':
           $ref: '#/components/responses/AgentUnauthorized'
         '403':
-          $ref: '#/components/responses/AgentForbidden'
+          $ref: '#/components/responses/AgentBaseScopeReadForbidden'
         '404':
           $ref: '#/components/responses/AgentNotFound'
         '422':
@@ -2524,7 +2535,7 @@ paths:
         '401':
           $ref: '#/components/responses/AgentUnauthorized'
         '403':
-          $ref: '#/components/responses/AgentForbidden'
+          $ref: '#/components/responses/AgentBaseScopeMutationForbidden'
         '404':
           $ref: '#/components/responses/AgentNotFound'
         '422':
@@ -2544,7 +2555,7 @@ paths:
         '401':
           $ref: '#/components/responses/AgentUnauthorized'
         '403':
-          $ref: '#/components/responses/AgentForbidden'
+          $ref: '#/components/responses/AgentBaseScopeMutationForbidden'
         '404':
           $ref: '#/components/responses/AgentNotFound'
         '422':
@@ -4688,6 +4699,99 @@ paths:
         '502':
           $ref: '#/components/responses/BillingUpstreamUnavailable'
       operationId: get_tenant_billing_usage
+  /bug-reports:
+    post:
+      operationId: submitBugReport
+      tags:
+        - Bug Reports
+      summary: Submit a console bug report
+      security:
+        - bearerAuth: []
+      description: 'Any authenticated console user may submit, including users without a tenant, with a suspended tenant or changed membership. No tenant checks. Send raw ZIP, not multipart/form-data or JWE. Exactly report.json and report.html are required; screenshot.jpg is optional. Actual inflated caps: JSON 1 MiB, HTML 1 MiB, JPEG 10 MiB, combined 12 MiB. No other entries, directories or duplicate names. report.html must be self-contained with inline resources. report.json requires integer schemaVersion=1 and string reportId equal to Idempotency-Key. Optional description, page.url and ISO 8601 createdAt become null on wrong types; description/page URL are truncated to 5000/2048 Unicode characters. The user block is ignored. Author/tenant come from authentication and profile snapshots from the server directory. Same key + user + SHA-256 returns the same ID; conflicts return 409. Interrupted pending uploads can be completed by replaying identical bytes. Every authenticated request consumes the per-user quota of 5 per calendar hour, including replays, validation errors and storage errors. A replay can receive 429 before idempotency processing; wait Retry-After and retry with unchanged key and body. Waiting does not reserve quota. Stored reports live for 90 days; pending reports can be pruned after 24 hours of inactivity, with an absolute 90-day retention for all statuses. Deleting reports return 503; after removal the same submission creates a new report/ID.'
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            $ref: '#/components/schemas/BugReportClientId'
+      requestBody:
+        required: true
+        content:
+          application/zip:
+            schema:
+              type: string
+              format: binary
+              maxLength: 2000000
+              description: Nonempty raw ZIP bytes. Content-Type must be exactly application/zip.
+      responses:
+        '200':
+          description: Stored replay or successful pending recovery; same server ID.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/StandardResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/BugReportReceipt'
+                    required:
+                      - data
+        '201':
+          description: New report fully stored; nonempty server ID.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/StandardResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/BugReportReceipt'
+                    required:
+                      - data
+        '401':
+          description: Missing or invalid bearer token (UNAUTHORIZED / INVALID_TOKEN)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+        '409':
+          description: 'BUG_REPORT_IDEMPOTENCY_CONFLICT: same key with another body or user.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+        '413':
+          description: 'BUG_REPORT_TOO_LARGE: body exceeds 2,000,000 bytes.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+        '422':
+          description: 'VALIDATION_ERROR: invalid/missing Idempotency-Key, wrong Content-Type or empty body. BUG_REPORT_ARCHIVE_INVALID: ZIP, composition, inflated limits, JSON or strict fields invalid. BUG_REPORT_ID_MISMATCH: reportId differs from the header.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+        '429':
+          description: 'RATE_LIMIT_EXCEEDED: every authenticated attempt counts. Retry-After does not reserve next-window quota.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+          headers:
+            Retry-After:
+              description: Seconds until the current calendar window ends.
+              schema:
+                type: integer
+                minimum: 1
+        '503':
+          description: 'BUG_REPORT_STORAGE_UNAVAILABLE: storage unavailable or not configured, storage timeout, incomplete/failing finalization, concurrent operation, expired report or deletion in progress. Retry identical bytes and key.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
   /feedback:
     post:
       tags:
@@ -9335,8 +9439,8 @@ paths:
         - Projects
   /services/catalog:
     get:
-      summary: List active public service catalog entries
-      description: 'Global authenticated catalog: active + public only, sorted by code. Secret defaults are masked. Tenant context is optional, but an existing inactive tenant or a token/membership mismatch can return 403.'
+      summary: List active service catalog entries
+      description: 'Global authenticated catalog: active + public for ordinary users; superadmins receive active entries of any visibility. Sorted by code, with the same search and pagination rules for both modes. Secret defaults are masked; visibility is included only for superadmins. Infrastructure fields are omitted. Tenant context is optional, but an existing inactive tenant or a token/membership mismatch can return 403.'
       operationId: serviceCatalogList
       security:
         - bearerAuth: []
@@ -9405,7 +9509,7 @@ paths:
   /services/catalog/{id}:
     get:
       summary: Get public service catalog entry
-      description: Returns public entries including deprecated. Platform entries return SERVICE_CATALOG_NOT_FOUND (404). Tenant context is optional, but an existing inactive tenant or a token/membership mismatch can return 403.
+      description: Returns public entries of any status, including deprecated. Superadmins can also read platform entries of any status and receive visibility in the masked public projection. Other callers receive SERVICE_CATALOG_NOT_FOUND (404) for platform entries. Tenant context is optional, but an existing inactive tenant or a token/membership mismatch can return 403.
       operationId: serviceCatalogGet
       security:
         - bearerAuth: []
@@ -9442,7 +9546,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/StandardErrorResponse'
         '404':
-          description: SERVICE_CATALOG_NOT_FOUND for a missing or platform entry; NOT_FOUND for an invalid public ID.
+          description: SERVICE_CATALOG_NOT_FOUND for a missing entry or, for non-superadmins only, a platform entry; NOT_FOUND for an invalid public ID.
           content:
             application/json:
               schema:
@@ -15615,6 +15719,7 @@ components:
         - name
         - type
     MarketplaceAgentPreview:
+      description: For every non-superadmin, including gov callers, profile is null and mcp_servers/env_vars are empty arrays. Superadmins retain the full preview with secret ENV values masked as ***. Descriptive marketplace and agent card fields are unchanged; no tenant context is required.
       type: object
       properties:
         profile:
@@ -16030,6 +16135,7 @@ components:
         engine_default:
           $ref: '#/components/schemas/AgentEffectiveProfileConfig'
         agent:
+          description: Raw base profile only for superadmins or gov tenants with an editable connection; otherwise null, also when is_gov cannot be confirmed. Null can mean absent or hidden; inheritance.layers_present.agent still reports actual presence. Merged profile and inheritance always include the base layer.
           anyOf:
             - allOf:
                 - $ref: '#/components/schemas/AgentEffectiveProfileConfig'
@@ -16064,6 +16170,7 @@ components:
               enum:
                 - null
         agent:
+          description: Raw base profile only for superadmins or gov tenants with an editable connection; otherwise null, also when is_gov cannot be confirmed. Null can mean absent or hidden; inheritance.layers_present.agent still reports actual presence. Merged profile and inheritance always include the base layer.
           anyOf:
             - allOf:
                 - $ref: '#/components/schemas/AgentEffectiveProfileConfig'
@@ -17732,6 +17839,23 @@ components:
       type: array
       items:
         $ref: '#/components/schemas/BillingOperation'
+    BugReportId:
+      type: string
+      pattern: ^bgr_[a-zA-Z0-9]{6,}$
+      example: bgr_aB3xYz
+      description: Opaque server ID from idEncode, prefix bgr. Use an ID returned by the API.
+    BugReportClientId:
+      type: string
+      pattern: ^br-\d{13,16}-[0-9a-f]{32}$
+      description: Client idempotency key; report.json.reportId must match exactly.
+    BugReportReceipt:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          $ref: '#/components/schemas/BugReportId'
+      required:
+        - id
     FeedbackId:
       type: string
       description: External feedback identifier encoded by idEncode with prefix "fb". The pattern describes the default Sqids alphabet and minimum length. Use an ID returned by the API; the example only illustrates the format.
@@ -19850,6 +19974,10 @@ components:
           description: Ordered identifiers derived from non-suspended versions only; untouched migrated identifiers may include null or values outside the current input constraints.
         status:
           $ref: '#/components/schemas/ServiceCatalogStatus'
+        visibility:
+          allOf:
+            - $ref: '#/components/schemas/ServiceCatalogVisibility'
+          description: Present only in responses to superadmins; omitted for other callers of the public catalog.
         created_at:
           type: string
           nullable: true
@@ -19875,11 +20003,16 @@ components:
         - created_at
         - updated_at
         - env_template
-      description: Shared catalog fields with secret defaults masked. Public responses contain these fields only; admin responses also include visibility, informational port and all versions with runtime presets.
+      description: Shared catalog fields with secret defaults masked. Public responses contain these fields only, with visibility present only for superadmins. Admin responses also include informational port and all versions with runtime presets, and always include visibility.
     ServiceCatalogListResponseData:
       type: array
       items:
         $ref: '#/components/schemas/ServiceCatalogEntryResponseData'
+    ServiceCatalogVisibility:
+      type: string
+      enum:
+        - public
+        - platform
     ServiceCatalogEnvRowResponse:
       type: object
       additionalProperties: false
@@ -25582,6 +25715,18 @@ components:
             $ref: '#/components/schemas/StandardErrorResponse'
     AgentUnauthorized:
       description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/StandardErrorResponse'
+    AgentBaseScopeReadForbidden:
+      description: AGENT_BASE_SCOPE_RESTRICTED for non-superadmins when the organization is not gov or the tenant-agent connection is read-only (marketplace). Gov members may read editable base configuration regardless of creator. Superadmins retain read access. Existing tenant middleware errors (TENANT_REQUIRED, TENANT_INACTIVE, FORBIDDEN) still apply.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/StandardErrorResponse'
+    AgentBaseScopeMutationForbidden:
+      description: Existing mutation checks run first, including for GET service declarations. Members receive FORBIDDEN for another creator or a read-only connection; owner/admin/superadmin receive AGENT_NOT_EDITABLE for a read-only connection. Then non-superadmins of a non-gov organization receive AGENT_BASE_SCOPE_RESTRICTED. Superadmins bypass only the gov check. Existing tenant middleware errors (TENANT_REQUIRED, TENANT_INACTIVE, FORBIDDEN) still apply.
       content:
         application/json:
           schema:
