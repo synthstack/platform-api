@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: SynthStack Backend API
-  version: v2.23.0+21709
+  version: v2.24.0+21915
   contact:
     name: SynthStack
     url: https://synthstack.ai
@@ -14903,6 +14903,7 @@ components:
           type: string
           nullable: true
         key:
+          description: ENV keys must not start with AGENT_, GITHUB_ or SS_ after trimming, case-insensitively; violations return 422 VALIDATION_ERROR with field details. Applies to supplied keys and materialized catalog defaults.
           type: string
           maxLength: 255
         value:
@@ -18919,6 +18920,7 @@ components:
           type: string
           nullable: true
         key:
+          description: ENV keys must not start with AGENT_, GITHUB_ or SS_ after trimming, case-insensitively; violations return 422 VALIDATION_ERROR with field details. Applies to supplied keys and materialized catalog defaults.
           type: string
           maxLength: 255
         value:
@@ -19719,6 +19721,7 @@ components:
             config:
               $ref: '#/components/schemas/ProjectProfileConfig'
     ProjectEnvCreateRequestBody:
+      description: ENV keys must not start with AGENT_, GITHUB_ or SS_ after trimming, case-insensitively; violations return 422 VALIDATION_ERROR with field details.
       type: object
       properties:
         key:
@@ -19734,6 +19737,7 @@ components:
         - key
         - value
     ProjectEnvUpdateRequestBody:
+      description: ENV keys must not start with AGENT_, GITHUB_ or SS_ after trimming, case-insensitively; violations return 422 VALIDATION_ERROR with field details. PATCH checks the resulting key, including a saved key when key is omitted; delete or explicitly rename a reserved key to resume writes.
       type: object
       minProperties: 1
       additionalProperties: false
@@ -19749,6 +19753,7 @@ components:
           type: boolean
           description: Changing from true to false requires a new explicit value that is not the secret mask.
     ProjectEnvMutationItem:
+      description: ENV keys must not start with AGENT_, GITHUB_ or SS_ after trimming, case-insensitively; violations return 422 VALIDATION_ERROR with field details.
       type: object
       properties:
         key:
@@ -19764,6 +19769,7 @@ components:
       required:
         - key
     ProjectEnvReplaceRequestBody:
+      description: ENV keys must not start with AGENT_, GITHUB_ or SS_ after trimming, case-insensitively; violations return 422 VALIDATION_ERROR with field details.
       type: object
       properties:
         env_vars:
@@ -19839,6 +19845,8 @@ components:
         `config` and `env_variables` are public payload stored and returned
         as-is. Do not store secrets in them; reference project/agent env vars
         with `is_secret=true` via `$VAR` placeholders.
+        ENV keys must not start with AGENT_, GITHUB_ or SS_ after trimming, case-insensitively; violations return 422 VALIDATION_ERROR with field details.
+        Both env_variables and config.env are checked, including config-only PATCH.
       properties:
         name:
           type: string
@@ -19886,6 +19894,8 @@ components:
         `config` and `env_variables` are public payload stored and returned
         as-is. Do not store secrets in them; reference project/agent env vars
         with `is_secret=true` via `$VAR` placeholders.
+        ENV keys must not start with AGENT_, GITHUB_ or SS_ after trimming, case-insensitively; violations return 422 VALIDATION_ERROR with field details.
+        Both env_variables and config.env are checked, including config-only PATCH.
       properties:
         name:
           type: string
@@ -26580,6 +26590,7 @@ components:
               replace_mode:
                 type: boolean
     McpCreateRequest:
+      description: ENV keys must not start with AGENT_, GITHUB_ or SS_ after trimming, case-insensitively; violations return 422 VALIDATION_ERROR with field details. Both env_variables and config.env are checked, including config-only PATCH without type.
       required: true
       content:
         application/json:
@@ -26620,6 +26631,7 @@ components:
               use_global_env:
                 type: boolean
     McpUpdateRequest:
+      description: ENV keys must not start with AGENT_, GITHUB_ or SS_ after trimming, case-insensitively; violations return 422 VALIDATION_ERROR with field details. Both env_variables and config.env are checked, including config-only PATCH without type.
       required: true
       content:
         application/json:
@@ -26657,6 +26669,7 @@ components:
               use_global_env:
                 type: boolean
     EnvCreateRequest:
+      description: ENV keys must not start with AGENT_, GITHUB_ or SS_ after trimming, case-insensitively; violations return 422 VALIDATION_ERROR with field details.
       required: true
       content:
         application/json:
@@ -26677,6 +26690,7 @@ components:
                 type: boolean
                 default: false
     EnvUpdateRequest:
+      description: ENV keys must not start with AGENT_, GITHUB_ or SS_ after trimming, case-insensitively; violations return 422 VALIDATION_ERROR with field details. PATCH checks the resulting key, including a saved key when key is omitted; delete or explicitly rename a reserved key to resume writes.
       required: true
       content:
         application/json:
@@ -26695,6 +26709,7 @@ components:
                 type: boolean
                 description: Changing from true to false requires a new explicit value that is not the secret mask.
     EnvMutationRequest:
+      description: ENV keys must not start with AGENT_, GITHUB_ or SS_ after trimming, case-insensitively; violations return 422 VALIDATION_ERROR with field details.
       required: true
       content:
         application/json:
