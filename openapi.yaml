@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: SynthStack Backend API
-  version: v2.24.0+21915
+  version: v2.25.0+22093
   contact:
     name: SynthStack
     url: https://synthstack.ai
@@ -13974,7 +13974,7 @@ paths:
   /tenant/workflow-secrets:
     get:
       summary: List current tenant workflow secret metadata
-      description: Owner membership in an active tenant is required, including for platform superadmins. Secret values are never returned. No pagination; at most 50 secrets by default.
+      description: At acquire, a tenant workflow secret overrides the same-named platform secret. EXECUTION_TOKEN is reserved for the execution credential and cannot be supplied as a workflow secret. Owner membership in an active tenant is required, including for platform superadmins. Secret values are never returned. No pagination; at most 50 secrets by default.
       security:
         - bearerAuth: []
       responses:
@@ -14007,7 +14007,7 @@ paths:
   /tenant/workflow-secrets/{name}:
     put:
       summary: Create or replace a current tenant workflow secret
-      description: Owner membership in an active tenant is required, including for platform superadmins. Replaces the entire value; created_at is preserved and updated_at is refreshed. Every successful PUT synchronously emits tenant_workflow_secret.updated with only tenant_id and secret_name. Values are encrypted at rest and never returned or logged. Name format validation precedes reserved-name checks; execution_token is invalid format, while EXECUTION_TOKEN is reserved. The default limit is 50 secrets per tenant.
+      description: At acquire, a tenant workflow secret overrides the same-named platform secret. EXECUTION_TOKEN is reserved for the execution credential and cannot be supplied as a workflow secret. Owner membership in an active tenant is required, including for platform superadmins. Replaces the entire value; created_at is preserved and updated_at is refreshed. Every successful PUT synchronously emits tenant_workflow_secret.updated with only tenant_id and secret_name. Values are encrypted at rest and never returned or logged. Name format validation precedes reserved-name checks; execution_token is invalid format, while EXECUTION_TOKEN is reserved. The default limit is 50 secrets per tenant.
       security:
         - bearerAuth: []
       parameters:
@@ -14061,7 +14061,7 @@ paths:
       operationId: put_tenant_workflow_secrets_name
     delete:
       summary: Delete a current tenant workflow secret
-      description: Owner membership in an active tenant is required, including for platform superadmins. Synchronously emits tenant_workflow_secret.deleted with only tenant_id and secret_name. There is no reserved-name special case; absent secrets return NOT_FOUND. Noncanonical names do not match the route.
+      description: At acquire, a tenant workflow secret overrides the same-named platform secret. EXECUTION_TOKEN is reserved for the execution credential and cannot be supplied as a workflow secret. Owner membership in an active tenant is required, including for platform superadmins. Synchronously emits tenant_workflow_secret.deleted with only tenant_id and secret_name. There is no reserved-name special case; absent secrets return NOT_FOUND. Noncanonical names do not match the route.
       security:
         - bearerAuth: []
       parameters:
