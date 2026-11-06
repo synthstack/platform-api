@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: SynthStack Backend API
-  version: v2.25.0+22093
+  version: v2.26.0+22577
   contact:
     name: SynthStack
     url: https://synthstack.ai
@@ -31,6 +31,8 @@ tags:
     description: Bug Reports operations.
   - name: Feedback
     description: Feedback operations.
+  - name: Integration Github Backend
+    description: Integration Github Backend operations.
   - name: Integrations
     description: Integrations operations.
   - name: News
@@ -4885,6 +4887,180 @@ paths:
               schema:
                 $ref: '#/components/schemas/StandardErrorResponse'
       operationId: post_feedback
+  /github/connect:
+    post:
+      operationId: githubConnect
+      summary: Start GitHub App connection
+      security:
+        - bearerAuth: []
+      description: Requires an authenticated user and active tenant context, with tenant owner/admin role or platform superadmin privileges. Returns install and authorize links for one connect session; no integration is created. Request body is unnecessary; an empty object is accepted. Rate limit is 30 requests per minute per IP, fail closed. The github backend must be enabled in the environment registry; otherwise BACKEND_TYPE_UNKNOWN is returned without issuing state.
+      responses:
+        '200':
+          description: Connect links generated
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/StandardResponse'
+                  - type: object
+                    required:
+                      - data
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/GithubConnectLinks'
+        '401':
+          description: Authentication required or token invalid (UNAUTHORIZED / INVALID_TOKEN).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+        '403':
+          description: INTEGRATION_ACCESS_FORBIDDEN, or tenant context/access rejected by auth and tenant middleware.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+        '422':
+          description: BACKEND_TYPE_UNKNOWN — GitHub has not been enabled in this environment.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+        '429':
+          description: Rate limit exceeded (30/minute/IP).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+        '500':
+          description: DEPENDENCY_CONTRACT_VIOLATION for invalid App/connect configuration, or an internal configuration/storage failure.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+        '503':
+          description: Required dependency or fail-closed rate limiter unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+      tags:
+        - Integration Github Backend
+  /github/installations:
+    post:
+      operationId: githubFinalizeInstallation
+      summary: Connect an owned GitHub App installation
+      security:
+        - bearerAuth: []
+      description: |-
+        Requires an authenticated user and active tenant context; owner/admin or superadmin management
+        rights are checked again. Rate limit: 15 requests/minute/IP, fail closed.
+
+        Install: submit callback state, code and installation_id. Authorize: submit state and code;
+        the backend discovers installations and confirms ownership. A personal installation requires
+        the GitHub account ID to match the authorized user's ID. An organization requires active admin
+        membership. Ownership is checked before revealing an existing connection.
+
+        Multiple owned installations return 422 INSTALLATION_SELECTION_REQUIRED. Select one, retain
+        its ID with the state, follow the original authorize_url for a NEW code, then submit state,
+        new code and selected installation_id (Selection). Ownership is verified again. No GitHub user
+        token or ownership proof is stored. An expired state requires a new POST /github/connect.
+
+        Finalization is not idempotent. State consumption, integration creation and installation link
+        creation commit atomically. A quota or write rollback leaves state unused but the OAuth code
+        spent: resolve the cause and start a new connect session via authorize_url, without reinstalling.
+        A same-state race loses with 403; different-state races for one installation lose with 409 and
+        the losing state stays unused. Credential rotation on a live integration is unsupported.
+
+        Retry guidance: a 503 before OAuth exchange (initial app installation lookup in Install/Selection)
+        leaves state and code intact. During or after exchange, the code may be spent: one repeat may
+        return 403 INSTALLATION_ACCESS_NOT_CONFIRMED, requiring new authorization. Never retry creation
+        automatically after an unknown commit outcome or post-commit failure. Check the integrations
+        list first; if no connection exists, start a new connect session using authorize_url.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GithubFinalizeRequest'
+            examples:
+              install:
+                summary: Callback after installation
+                value:
+                  state: <signed-state>
+                  code: <oauth-code>
+                  installation_id: 123
+              authorize:
+                summary: Callback for an already installed App
+                value:
+                  state: <signed-state>
+                  code: <oauth-code>
+              selection:
+                summary: Selected installation with a newly obtained code
+                value:
+                  state: <same-unexpired-state>
+                  code: <new-oauth-code>
+                  installation_id: 123
+      responses:
+        '201':
+          description: Integration created with public int_ ID. Credentials and installation_id are absent. Best-effort connection testing yields active, error or pending and never changes this success status. Response construction can still fail after commit; check the list in that case.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/StandardResponse'
+                  - type: object
+                    required:
+                      - data
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/IntegrationResponseData'
+        '401':
+          description: Authentication required or token invalid (UNAUTHORIZED / INVALID_TOKEN).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+        '403':
+          description: INTEGRATION_ACCESS_FORBIDDEN or tenant access denial; CONNECT_STATE_INVALID for missing, invalid, expired, used or foreign state (before field validation); INSTALLATION_ACCESS_NOT_CONFIRMED for invalid/spent OAuth code, missing installation, unconfirmed personal/org ownership, or no owned candidates. Ownership denial reveals no connection occupancy. Start a new connect flow.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+        '409':
+          description: INSTALLATION_ALREADY_CONNECTED, only after current ownership confirmation. Same tenant gets a public integration ID in details; other tenants get no details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GithubInstallationConflictResponse'
+        '422':
+          description: INSTALLATION_SELECTION_REQUIRED with owned candidates (state unused, code spent); VALIDATION_ERROR for missing/invalid code, invalid installation_id or unexpected fields; QUOTA_EXCEEDED with atomic rollback (start a new flow after resolving quota); BACKEND_TYPE_UNKNOWN if registration was removed. Missing state is always 403, not 422.
+          content:
+            application/json:
+              schema:
+                anyOf:
+                  - $ref: '#/components/schemas/GithubInstallationSelectionResponse'
+                  - $ref: '#/components/schemas/StandardErrorResponse'
+        '429':
+          description: Rate limit exceeded (15/minute/IP).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+        '500':
+          description: DEPENDENCY_CONTRACT_VIOLATION for platform OAuth configuration (incorrect_client_credentials, redirect_uri_mismatch); GITHUB_RESPONSE_INVALID for invalid App authentication or unexpected GitHub responses; host configuration/storage failures. A post-commit failure does not undo creation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+        '503':
+          description: BACKEND_UNAVAILABLE for GitHub network/server/rate-limit failure or unknown commit outcome; DEPENDENCY_UNAVAILABLE for host dependencies; rate limiter unavailable. Code may already be spent. For unknown commit outcome check integrations before reconnecting; never automatically retry creation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+      tags:
+        - Integration Github Backend
   /integrations:
     get:
       summary: List integrations
@@ -4998,7 +5174,7 @@ paths:
         - Integrations
     post:
       summary: Create integration
-      description: Register a new external source integration and store encrypted credentials. Requires tenant owner/admin or a superadmin with tenant context.
+      description: Register a new external source integration and store encrypted credentials. Requires tenant owner/admin or a superadmin with tenant context. Connect-managed backends (such as github) require their dedicated connect flow and reject generic creation with 422 BACKEND_CONNECT_REQUIRED.
       operationId: integrationCreate
       requestBody:
         required: true
@@ -5033,7 +5209,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/StandardErrorResponse'
         '422':
-          description: Unknown backend type, unsupported shared backend contract, payload limit, unknown field, invalid config, quota, or validation error
+          description: BACKEND_CONNECT_REQUIRED for connect-managed backends; unknown backend type, unsupported shared backend contract, payload limit, unknown field, invalid config, quota, or validation error
           content:
             application/json:
               schema:
@@ -5156,7 +5332,7 @@ paths:
         - Integrations
     patch:
       summary: Update integration
-      description: Update integration name, config, or credentials. Status changes are exposed via /integrations/{id}/disable and /integrations/{id}/enable. Requires tenant owner/admin or a superadmin with tenant context.
+      description: Update integration name, config, or credentials. Connect-managed backends reject any credentials field with 422 BACKEND_CONNECT_REQUIRED; name/config updates remain available. Status changes are exposed via /integrations/{id}/disable and /integrations/{id}/enable. Requires tenant owner/admin or a superadmin with tenant context.
       operationId: integrationUpdate
       parameters:
         - name: id
@@ -5203,7 +5379,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/StandardErrorResponse'
         '422':
-          description: Payload limit, unknown field, invalid config, unsupported shared backend contract, or validation error; CREDENTIALS_REFERENCE_INVALID for a malformed credential reference
+          description: BACKEND_CONNECT_REQUIRED for credentials changes on connect-managed backends; payload limit, unknown field, invalid config, unsupported shared backend contract, or validation error; CREDENTIALS_REFERENCE_INVALID for a malformed credential reference
           content:
             application/json:
               schema:
@@ -17886,6 +18062,142 @@ components:
       description: Public ID in the format {prefix}_{sqid}. The catalog prefix starts with a lowercase letter and contains lowercase letters or digits. The Sqids segment encodes one positive integer using the configured alphabet and minimum length (at least six alphanumeric characters by default). This shared schema checks the structure only; the codec validates the registered prefix, expected entity, and canonical encoding when canonical_check is enabled. Entity-specific ID schemas are declared in the owning modules.
       pattern: ^[a-z][a-z0-9]*_[\s\S]+$
       example: tsk_lPasgV
+    GithubConnectLinks:
+      type: object
+      required:
+        - message
+        - install_url
+        - authorize_url
+        - expires_at
+      properties:
+        message:
+          type: string
+        install_url:
+          type: string
+          format: uri
+          description: Install the App on a new account. GitHub returns code, state and installation_id to the frontend Callback URL.
+        authorize_url:
+          type: string
+          format: uri
+          description: Authorize an already installed App without reinstallation. GitHub returns code and state to the same frontend Callback URL, without installation_id. Both URLs carry the same single-use state. Use this URL again with the unexpired state to obtain a new code after selection.
+        expires_at:
+          type: string
+          format: date-time
+          description: State expiry in UTC; default lifetime is 900 seconds, including selection and reauthorization.
+    GithubFinalizeRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - state
+        - code
+      description: Install and Selection supply installation_id; Authorize omits it. Every request that can create an integration exchanges its own OAuth code and verifies current installation ownership. Selection requires a NEW code obtained after choosing a candidate; a previous candidate list does not grant authority. State is checked BEFORE field validation, including when absent (403).
+      properties:
+        state:
+          type: string
+          minLength: 1
+          maxLength: 2048
+          writeOnly: true
+          description: Signed one-use connect session bound to the authenticated tenant and user.
+        code:
+          type: string
+          minLength: 1
+          maxLength: 255
+          writeOnly: true
+          description: One-time GitHub OAuth code. Missing code is 422 even when installation_id is provided.
+        installation_id:
+          type: integer
+          format: int64
+          minimum: 1
+          description: External GitHub installation number, never an encoded platform ID. JSON strings are rejected.
+    GithubInstallationCandidate:
+      type: object
+      additionalProperties: false
+      required:
+        - installation_id
+        - account_login
+        - account_type
+      properties:
+        installation_id:
+          type: integer
+          format: int64
+          minimum: 1
+          description: External GitHub number; not idEncode transformed.
+        account_login:
+          type: string
+        account_type:
+          type: string
+          enum:
+            - User
+            - Organization
+    GithubInstallationConflictResponse:
+      type: object
+      required:
+        - status
+        - error
+      properties:
+        status:
+          type: string
+          enum:
+            - error
+        error:
+          type: object
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+              enum:
+                - INSTALLATION_ALREADY_CONNECTED
+            message:
+              type: string
+            details:
+              type: array
+              description: Present only for the caller's tenant. Entirely omitted for another tenant; no foreign integration information is disclosed.
+              items:
+                type: object
+                required:
+                  - field
+                  - message
+                  - integration_id
+                properties:
+                  field:
+                    type: string
+                    enum:
+                      - installation_id
+                  message:
+                    type: string
+                  integration_id:
+                    $ref: '#/components/schemas/IntegrationId'
+    GithubInstallationSelectionResponse:
+      type: object
+      required:
+        - status
+        - error
+      properties:
+        status:
+          type: string
+          enum:
+            - error
+        error:
+          type: object
+          required:
+            - code
+            - message
+            - details
+          properties:
+            code:
+              type: string
+              enum:
+                - INSTALLATION_SELECTION_REQUIRED
+            message:
+              type: string
+            details:
+              type: array
+              minItems: 2
+              description: Only installations whose ownership was confirmed in this request. State remains unused; the OAuth code is spent.
+              items:
+                $ref: '#/components/schemas/GithubInstallationCandidate'
     IntegrationId:
       type: string
       description: Integration identifier (prefix "int")
@@ -17981,6 +18293,7 @@ components:
       enum:
         - VALIDATION_ERROR
         - BACKEND_TYPE_UNKNOWN
+        - BACKEND_CONNECT_REQUIRED
         - BACKEND_CAPABILITY_NOT_SUPPORTED
         - BACKEND_CREDENTIALS_REJECTED
         - BACKEND_RESOURCE_REJECTED
