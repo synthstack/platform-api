@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: SynthStack Backend API
-  version: v2.26.0+22577
+  version: v2.27.0+22834
   contact:
     name: SynthStack
     url: https://synthstack.ai
@@ -7342,13 +7342,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/StandardErrorResponse'
         '409':
-          description: Project integration conflict
+          description: PROJECT_INTEGRATION_CONFLICT when a primary integration or alias already exists, including when the project integration limit is reached.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/StandardErrorResponse'
         '422':
-          description: Integration not attachable or validation error, including SOURCE_TARGET_AMBIGUOUS when data_source_id and external_ref are both non-empty
+          description: Integration not attachable or validation error, including SOURCE_TARGET_AMBIGUOUS when data_source_id and external_ref are both non-empty, or PROJECT_INTEGRATION_LIMIT_EXCEEDED when the project integration limit is reached.
           content:
             application/json:
               schema:
@@ -11692,6 +11692,7 @@ paths:
       tags:
         - Tasks
       summary: List task publications
+      description: Returns journal records ordered by created_at DESC, id DESC, enriched with target_key, is_current and target_publications_count for grouping into target cards. The page fields, grouping projection and total share one consistent database snapshot. Changes between separate requests are allowed; grouping does not collapse or remove journal records.
       operationId: taskPublicationsList
       parameters:
         - $ref: '#/components/parameters/TaskIdPath'
@@ -11737,7 +11738,6 @@ paths:
           $ref: '#/components/responses/TasksDirectoryDependencyError'
         '503':
           $ref: '#/components/responses/TasksDirectoryDependencyUnavailable'
-      description: List task publications
     post:
       tags:
         - Tasks
@@ -19418,6 +19418,11 @@ components:
         active_tasks_count:
           type: integer
           minimum: 0
+        artifacts_size_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 'Sum of sizes of registered S3 artifacts of all kinds with storage_key; zero for deleted projects. URL-only artifacts and repository size are excluded. Shared objects count per reference; deleted rows and orphan uploads do not count; legacy unknown sizes contribute zero. Eventually consistent: refreshed after user mutations and by reconciliation scheduled every 60 minutes, without a fixed maximum delay. This is not physical bucket usage.'
         created_at:
           type: string
           nullable: true
@@ -19450,6 +19455,7 @@ components:
         - is_deleted
         - agents_count
         - active_tasks_count
+        - artifacts_size_bytes
         - created_at
         - updated_at
         - archived_at
@@ -21103,10 +21109,30 @@ components:
         - metadata
         - created_at
         - updated_at
+    TaskPublicationListItem:
+      allOf:
+        - $ref: '#/components/schemas/TaskPublicationResponseData'
+        - type: object
+          required:
+            - target_key
+            - is_current
+            - target_publications_count
+          properties:
+            target_key:
+              type: string
+              minLength: 1
+              description: 'Opaque target key scoped to this task, stable while its discriminator is unchanged. Clients must not parse it or persist it across releases. A pull_request uses its nonempty target_branch first (one channel, including successive different PRs), otherwise its nonempty external_url. Adding a PR URL never changes a branch key. An external_link uses its nonempty external_url. Types and branch/URL discriminators are distinct: a capability PR and a branchless manual registration of its URL stay separate. Uploads and missing-discriminator fallbacks each have a singleton key derived from the public task_publication ID, adding no information beyond the response''s id field. Editing a manual URL regroups the record on the next read. This is not an entity ID and is not transformed by idEncode.'
+            is_current:
+              type: boolean
+              description: True for exactly one record per target across the entire task, ordered by created_at DESC, id DESC, including closed records. Independent of pagination.
+            target_publications_count:
+              type: integer
+              minimum: 1
+              description: Total journal records for this target across the entire task, including other pages.
     TaskPublicationListResponseData:
       type: array
       items:
-        $ref: '#/components/schemas/TaskPublicationResponseData'
+        $ref: '#/components/schemas/TaskPublicationListItem'
     TaskAttributionSource:
       type: string
       description: Immutable reason used to attribute one execution to its accountable user.
