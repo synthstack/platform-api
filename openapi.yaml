@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: SynthStack Backend API
-  version: v2.27.0+22834
+  version: v2.28.0+23096
   contact:
     name: SynthStack
     url: https://synthstack.ai
@@ -21625,7 +21625,7 @@ components:
           type: string
           nullable: true
           maxLength: 200
-        linked_issue_url:
+        external_issue_url:
           type: string
           nullable: true
           maxLength: 1000
@@ -21673,7 +21673,7 @@ components:
         - lifecycle_status
         - workflow_status
         - base_branch
-        - linked_issue_url
+        - external_issue_url
         - created_by
         - created_at
         - updated_at
@@ -24037,7 +24037,7 @@ components:
           type: string
           nullable: true
           maxLength: 200
-        linked_issue_url:
+        external_issue_url:
           type: string
           nullable: true
           maxLength: 1000
@@ -24049,7 +24049,7 @@ components:
         - executors
     TaskUpdateRequestBody:
       type: object
-      description: PATCH supports title, description, base_branch, linked_issue_url, and label_ids only. Agent assignment changes are managed through /tasks/entries/{id}/agents.
+      description: PATCH supports title, description, base_branch, external_issue_url, and label_ids only. Agent assignment changes are managed through /tasks/entries/{id}/agents.
       minProperties: 1
       properties:
         title:
@@ -24063,7 +24063,7 @@ components:
           type: string
           nullable: true
           maxLength: 200
-        linked_issue_url:
+        external_issue_url:
           type: string
           nullable: true
           maxLength: 1000
