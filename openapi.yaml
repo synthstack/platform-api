@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: SynthStack Backend API
-  version: v2.28.0+23096
+  version: v2.29.0+23300
   contact:
     name: SynthStack
     url: https://synthstack.ai
@@ -5756,7 +5756,7 @@ paths:
     post:
       summary: Register data source
       description: |
-        Idempotently register one addressable data source for an integration. Requires tenant owner/admin or a superadmin with tenant context. When backend lookup is needed, only a successful null result permits manual registration with the existing kind validation. Dependency failure or an invalid descriptor returns 500/503 before creating the data source or publishing events; documented credential/resource rejections return 422. Backend metadata is checked against payload_shape before merging; invalid keys, excessive depth, key count, value length or total size produce DEPENDENCY_CONTRACT_VIOLATION (500). Client metadata retains VALIDATION_ERROR/INTEGRATION_PAYLOAD_TOO_LARGE (422). Known getDataSource credential rejections (FORGEJO_TOKEN_INVALID/401, FORGEJO_TOKEN_SCOPE_INSUFFICIENT/422) produce BACKEND_CREDENTIALS_REJECTED (422). FORGEJO_BACKEND_API_ERROR/401/403/404/422 produces BACKEND_RESOURCE_REJECTED (422), including when the repository does not exist. Unknown code/status combinations and BACKEND_CAPABILITY_NOT_SUPPORTED/422 produce DEPENDENCY_CONTRACT_VIOLATION (500). All rejections stop registration without side effects. Only a successfully returned null confirms absence; exceptions never permit manual registration. Forgejo lookup requires a repository object with full_name in owner/repo format, at most 512 characters: exactly two nonempty segments containing ASCII letters, digits, underscores, hyphens or dots; dot and dot-dot segments are forbidden. Missing or extra segments and excessive length are invalid. An HTTP 200 with HTML, an empty body, a JSON scalar/null, a list or an invalid repository object produces DEPENDENCY_CONTRACT_VIOLATION (500), without a data source, outbox entry or linked event. Dependency error details contain only source and operation. Lookup runs when metadata is empty, kind is blank, or the submitted display_name is missing/blank. A complete payload with nonempty metadata, kind and display_name skips lookup. Host admission can return 422 BACKEND_CAPABILITY_NOT_SUPPORTED if the shared data-source interface is absent.
+        Idempotently register one addressable data source for an integration. Requires tenant owner/admin or a superadmin with tenant context. When backend lookup is needed, only a successful null result permits manual registration with the existing kind validation. Dependency failure or an invalid descriptor returns 500/503 before creating the data source or publishing events; documented credential/resource rejections return 422. Backend metadata is checked against payload_shape before merging; invalid keys, excessive depth, key count, value length or total size produce DEPENDENCY_CONTRACT_VIOLATION (500). Client metadata retains VALIDATION_ERROR/INTEGRATION_PAYLOAD_TOO_LARGE (422). Known getDataSource credential rejections (FORGEJO_TOKEN_INVALID/401, FORGEJO_TOKEN_SCOPE_INSUFFICIENT/422, GITEA_TOKEN_INVALID/401, GITEA_TOKEN_SCOPE_INSUFFICIENT/422) produce BACKEND_CREDENTIALS_REJECTED (422). FORGEJO_BACKEND_API_ERROR/401/403/404/422 and GITEA_BACKEND_API_ERROR/401/403/404/422 produce BACKEND_RESOURCE_REJECTED (422), including when the repository does not exist. Unknown code/status combinations and BACKEND_CAPABILITY_NOT_SUPPORTED/422 produce DEPENDENCY_CONTRACT_VIOLATION (500). All rejections stop registration without side effects. Only a successfully returned null confirms absence; exceptions never permit manual registration. Forgejo and Gitea lookups require a repository object with full_name in owner/repo format, at most 512 characters: exactly two nonempty segments containing ASCII letters, digits, underscores, hyphens or dots; dot and dot-dot segments are forbidden. Missing or extra segments and excessive length are invalid. An HTTP 200 with HTML, an empty body, a JSON scalar/null, a list or an invalid repository object produces DEPENDENCY_CONTRACT_VIOLATION (500), without a data source, outbox entry or linked event. FORGEJO_RESPONSE_INVALID/500 and GITEA_RESPONSE_INVALID/500 are classified as DEPENDENCY_CONTRACT_VIOLATION (500). Dependency error details contain only source and operation. Lookup runs when metadata is empty, kind is blank, or the submitted display_name is missing/blank. A complete payload with nonempty metadata, kind and display_name skips lookup. Host admission can return 422 BACKEND_CAPABILITY_NOT_SUPPORTED if the shared data-source interface is absent.
       operationId: dataSourceRegister
       parameters:
         - name: integrationId
@@ -18508,7 +18508,7 @@ components:
         user:
           type: object
           nullable: true
-          description: Forgejo provider user object or null; lists and scalars are rejected before recording an active probe. `id` is not a SynthStack encoded ID.
+          description: Forgejo or Gitea provider user object or null; lists and scalars are rejected before recording an active probe. `id` is not a SynthStack encoded ID.
           additionalProperties: true
         tested_at:
           type: string
