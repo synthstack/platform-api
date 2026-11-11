@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: SynthStack Backend API
-  version: v2.29.0+23300
+  version: v2.30.0+23935
   contact:
     name: SynthStack
     url: https://synthstack.ai
@@ -33,6 +33,8 @@ tags:
     description: Feedback operations.
   - name: Integration Github Backend
     description: Integration Github Backend operations.
+  - name: Integration Gitlab Backend
+    description: Integration Gitlab Backend operations.
   - name: Integrations
     description: Integrations operations.
   - name: News
@@ -5061,6 +5063,193 @@ paths:
                 $ref: '#/components/schemas/StandardErrorResponse'
       tags:
         - Integration Github Backend
+  /gitlab/connect:
+    post:
+      operationId: gitlabConnect
+      summary: Start GitLab OAuth connection
+      security:
+        - bearerAuth: []
+      description: Requires authentication, active tenant context and owner/admin or superadmin management rights. Returns an authorization URL and one-use state. Body is unnecessary. Rate limit is 30/minute/IP, fail closed. Unregistered gitlab returns BACKEND_TYPE_UNKNOWN before issuing state.
+      responses:
+        '200':
+          description: Authorization link generated
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/StandardResponse'
+                  - type: object
+                    required:
+                      - data
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/GitlabConnectLinks'
+        '401':
+          description: Authentication required or token invalid (UNAUTHORIZED / INVALID_TOKEN).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+        '403':
+          description: INTEGRATION_ACCESS_FORBIDDEN, or tenant context/access rejected by auth and tenant middleware.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+        '422':
+          description: BACKEND_TYPE_UNKNOWN — GitLab has not been enabled in this environment.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+        '429':
+          description: Rate limit exceeded (30/minute/IP).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+        '500':
+          description: DEPENDENCY_CONTRACT_VIOLATION for invalid App/connect configuration, or an internal configuration/storage failure.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+        '503':
+          description: Required dependency or fail-closed rate limiter unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+      tags:
+        - Integration Gitlab Backend
+  /gitlab/connections:
+    post:
+      operationId: gitlabFinalizeConnection
+      summary: Create or restore an owned GitLab namespace connection
+      security:
+        - bearerAuth: []
+      description: |-
+        Requires authentication, tenant context and owner/admin or superadmin management rights.
+        Rate limit: 15/minute/IP, fail closed. Checks access, state (403), payload (422), registration,
+        OAuth exchange and current namespace ownership, then the existing connection.
+        Personal namespaces belong to the authorized account; group namespaces require GitLab Owner.
+
+        Multiple candidates return NAMESPACE_SELECTION_REQUIRED without consuming state. Follow the
+        original authorize_url for a NEW code and submit it with the selected numeric namespace_id.
+        Candidates confer no continuing authority. Tokens/proof are not persisted before finalization.
+
+        A free namespace creates an integration (201). An existing same-tenant connection is recovered
+        (200), preserving its ID, bindings and connection identity. Recovery replaces credentials,
+        fences stale refresh/probe effects, revokes local tokens and does not consume creation quota.
+        Disabled integrations remain disabled and skip the post-commit probe. Otherwise that probe
+        uses the revision committed by recovery and cannot undo a concurrent disable.
+        Foreign-tenant connections return 409 without details, only after ownership confirmation.
+
+        State, vault, lifecycle, outbox and link commit atomically. Same-state races lose with 403.
+        Different-state creation races recheck the live link after rollback: same tenant recovers;
+        another tenant receives 409. Rollback keeps state unused but cannot restore a spent OAuth code.
+        A 503 during/after exchange may have spent the code. Obtain a fresh code using the same
+        unexpired authorize_url. Never replay creation/recovery after an unknown commit outcome;
+        inspect the integration list first. A post-commit response failure cannot undo the commit.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GitlabFinalizeRequest'
+            examples:
+              authorize:
+                summary: New authorization or recovery
+                value:
+                  state: <signed-state>
+                  code: <oauth-code>
+              selection:
+                summary: Selected namespace with a newly obtained code
+                value:
+                  state: <same-unexpired-state>
+                  code: <new-oauth-code>
+                  namespace_id: 123
+      responses:
+        '200':
+          description: Existing connection restored. The same public integration ID, current status and a nonempty message are returned. A disabled integration remains disabled; the message instructs use of the existing enable operation. Internal lifecycle revision is never returned.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/StandardResponse'
+                  - type: object
+                    required:
+                      - data
+                    properties:
+                      data:
+                        allOf:
+                          - $ref: '#/components/schemas/IntegrationResponseData'
+                          - type: object
+                            required:
+                              - message
+                            properties:
+                              message:
+                                type: string
+                                minLength: 1
+        '201':
+          description: Integration created with public int_ ID. Credentials and namespace_id are absent. Best-effort connection testing yields active, error or pending and never changes this success status. Response construction can still fail after commit; check the list in that case.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/StandardResponse'
+                  - type: object
+                    required:
+                      - data
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/IntegrationResponseData'
+        '401':
+          description: Authentication required or token invalid (UNAUTHORIZED / INVALID_TOKEN).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+        '403':
+          description: INTEGRATION_ACCESS_FORBIDDEN or tenant access denial; CONNECT_STATE_INVALID for missing, invalid, expired, used or foreign state (before field validation); NAMESPACE_ACCESS_NOT_CONFIRMED for invalid/spent OAuth code, unconfirmed namespace ownership, or no owned candidates. Ownership denial reveals no connection occupancy. Start a new connect flow.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+        '409':
+          description: NAMESPACE_ALREADY_CONNECTED after ownership verification, only for another tenant. No details are returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GitlabNamespaceConflictResponse'
+        '422':
+          description: NAMESPACE_SELECTION_REQUIRED with owned candidates (state unused, code spent); VALIDATION_ERROR for missing/invalid code, invalid namespace_id or unexpected fields; QUOTA_EXCEEDED with atomic rollback (start a new flow after resolving quota); BACKEND_TYPE_UNKNOWN if registration was removed. Missing state is always 403, not 422.
+          content:
+            application/json:
+              schema:
+                anyOf:
+                  - $ref: '#/components/schemas/GitlabNamespaceSelectionResponse'
+                  - $ref: '#/components/schemas/StandardErrorResponse'
+        '429':
+          description: Rate limit exceeded (15/minute/IP).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+        '500':
+          description: DEPENDENCY_CONTRACT_VIOLATION for platform OAuth configuration (invalid_client, unauthorized_client, redirect_uri mismatch); GITLAB_RESPONSE_INVALID for invalid OAuth responses or unexpected GitLab responses; host configuration/storage failures. A post-commit failure does not undo creation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+        '503':
+          description: BACKEND_UNAVAILABLE for GitLab network/server/rate-limit failure or unknown commit outcome; DEPENDENCY_UNAVAILABLE for host dependencies; rate limiter unavailable. Code may already be spent. For unknown commit outcome check integrations before reconnecting; never automatically retry creation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+      tags:
+        - Integration Gitlab Backend
   /integrations:
     get:
       summary: List integrations
@@ -5453,7 +5642,7 @@ paths:
     post:
       summary: Test integration
       description: |
-        Test backend connectivity and update integration status on a valid active/error result or a confirmed credential/API rejection from the configured mirror for this backend type (BACKEND_CREDENTIALS_REJECTED or BACKEND_RESOURCE_REJECTED, both HTTP 422). Backend error codes/statuses are recognized internally and mapped to these local errors. A confirmed rejection returns 422 only after its status and token revocation commit successfully. Persistence, commit or revocation failure rolls back the transaction and returns DEPENDENCY_FAILED (500) with source integrations and operation integrationService.test, without a tested/revocation event. Dependency/configuration failures and malformed results preserve status, last_tested_at, and active tokens; no tested/revocation event is emitted. Diagnostics must be null, an empty array or a map with string keys; nonempty lists, numeric keys and exception values other than string/null produce DEPENDENCY_CONTRACT_VIOLATION (500) before any state change, for both active and error results. With status error, valid diagnostics.exception is a negative probe result: the failed check is recorded and active tokens are revoked. With status active, diagnostics.exception is a malformed result (500 DEPENDENCY_CONTRACT_VIOLATION). Active results also validate optional version (string or null), token_mode (full, repository_scoped or null) and user (object or null) before any state change; omitted fields remain null. A negative result returns HTTP 200 with the local message "Connection failed" and null diagnostics/version/token_mode/user, including exception diagnostics. Mirrored business errors expose local details as [{field, message}], without source/operation or raw provider scope lists. Credential errors point to credentials; API errors point to config. Messages are "Backend credentials are invalid or revoked.", "Backend token lacks the scopes required for this operation.", and "Backend rejected access to the requested resource." respectively.
+        Test backend connectivity and update integration status on a valid active/error result or a confirmed credential/API rejection from the configured mirror for this backend type (BACKEND_CREDENTIALS_REJECTED or BACKEND_RESOURCE_REJECTED, both HTTP 422). Backend error codes/statuses are recognized internally and mapped to these local errors. A confirmed rejection returns 422 only after its status and token revocation commit successfully. An unresolved credential rotation or a change to credential generation/lifecycle revision during the probe returns DEPENDENCY_UNAVAILABLE (503). The stale result is discarded together with its last_tested_at update and token revocation; concurrent administrative changes are preserved. When rotation is unresolved, error.message advises reconnecting after an indeterminate outcome, or retrying/reconnecting while an attempt remains in flight. This guidance does not change lifecycle. Persistence, commit or revocation failure rolls back the transaction and returns DEPENDENCY_FAILED (500) with source integrations and operation integrationService.test, without a tested/revocation event. Dependency/configuration failures and malformed results preserve status, last_tested_at, and active tokens; no tested/revocation event is emitted. Diagnostics must be null, an empty array or a map with string keys; nonempty lists, numeric keys and exception values other than string/null produce DEPENDENCY_CONTRACT_VIOLATION (500) before any state change, for both active and error results. With status error, valid diagnostics.exception is a negative probe result: the failed check is recorded and active tokens are revoked. With status active, diagnostics.exception is a malformed result (500 DEPENDENCY_CONTRACT_VIOLATION). Active results also validate optional version (string or null), token_mode (full, repository_scoped or null) and user (object or null) before any state change; omitted fields remain null. A negative result returns HTTP 200 with the local message "Connection failed" and null diagnostics/version/token_mode/user, including exception diagnostics. Mirrored business errors expose local details as [{field, message}], without source/operation or raw provider scope lists. Credential errors point to credentials; API errors point to config. Messages are "Backend credentials are invalid or revoked.", "Backend token lacks the scopes required for this operation.", and "Backend rejected access to the requested resource." respectively.
       operationId: integrationTest
       parameters:
         - name: id
@@ -5506,7 +5695,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/StandardErrorResponse'
         '503':
-          description: BACKEND_PORT_UNAVAILABLE (port resolution failed), SOURCE_UNAVAILABLE (implementation lacks shared interfaces), or DEPENDENCY_UNAVAILABLE — a required backend call is temporarily unavailable. The operation does not fall back to defaults.
+          description: BACKEND_PORT_UNAVAILABLE (port resolution failed), SOURCE_UNAVAILABLE (implementation lacks shared interfaces), or DEPENDENCY_UNAVAILABLE — a required backend call is temporarily unavailable. Also returned when rotation is unresolved or the credential/lifecycle snapshot changed during the probe; that probe does not update status, last_tested_at, or revoke tokens. The operation does not fall back to defaults.
           content:
             application/json:
               schema:
@@ -9901,6 +10090,117 @@ paths:
           $ref: '#/components/responses/SkillsInternalError'
       tags:
         - Skills
+  /tasks/projects/{project_id}/artifact-uploads:
+    post:
+      tags:
+        - Tasks
+      summary: Issue a presigned PUT target for a user artifact
+      operationId: taskArtifactUploadCreate
+      description: Requires tenant and project access. Limited to 10 requests/minute per user, fail-closed. Both Content-Length and Content-Type are signed. The upload belongs to its creator; it must be finalized before the staged record expires. No task artifact is created here.
+      parameters:
+        - $ref: '#/components/parameters/TaskProjectIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskArtifactUploadCreateRequestBody'
+      responses:
+        '201':
+          description: Pending upload created; use the target for a direct S3 PUT, then finalize.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/StandardResponse'
+                  - type: object
+                    required:
+                      - data
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/TaskArtifactUploadCreateResponseData'
+        '400':
+          description: INVALID_JSON
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+        '401':
+          $ref: '#/components/responses/TasksUnauthorized'
+        '403':
+          $ref: '#/components/responses/TasksForbidden'
+        '404':
+          $ref: '#/components/responses/TasksNotFound'
+        '422':
+          description: VALIDATION_ERROR or SIZE_EXCEEDS_LIMIT
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+        '429':
+          $ref: '#/components/responses/TasksRateLimited'
+        '500':
+          $ref: '#/components/responses/TasksProjectDependencyError'
+        '503':
+          $ref: '#/components/responses/TasksServiceUnavailable'
+  /tasks/projects/{project_id}/artifact-uploads/{id}/finalize:
+    post:
+      tags:
+        - Tasks
+      summary: Accept one immutable revision of a staged upload
+      operationId: taskArtifactUploadFinalize
+      description: Limited to 30 requests/minute per user, fail-closed. Requires the same tenant, project and uploading user. An active finalized record replays its original revision. Error precedence is NOT_FOUND, UPLOAD_ALREADY_CONSUMED, UPLOAD_EXPIRED, then inspection errors. Missing object (S3 404) or missing VersionId gives UPLOAD_NOT_READY; S3 403 and other storage failures give ARTIFACT_STORAGE_UNAVAILABLE.
+      parameters:
+        - $ref: '#/components/parameters/TaskProjectIdPath'
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/TaskArtifactUploadId'
+      responses:
+        '200':
+          description: Accepted immutable revision, or replay while the upload is active.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/StandardResponse'
+                  - type: object
+                    required:
+                      - data
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/TaskArtifactUploadFinalizeResponseData'
+        '401':
+          $ref: '#/components/responses/TasksUnauthorized'
+        '403':
+          $ref: '#/components/responses/TasksForbidden'
+        '404':
+          $ref: '#/components/responses/TasksNotFound'
+        '409':
+          description: UPLOAD_NOT_READY or UPLOAD_ALREADY_CONSUMED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+        '410':
+          description: UPLOAD_EXPIRED, including previously finalized uploads.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+        '422':
+          description: SIZE_EXCEEDS_LIMIT for the captured revision.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+        '429':
+          $ref: '#/components/responses/TasksRateLimited'
+        '500':
+          $ref: '#/components/responses/TasksProjectDependencyError'
+        '503':
+          $ref: '#/components/responses/TasksServiceUnavailable'
   /tasks/projects/{project_id}/tasks:
     get:
       tags:
@@ -9992,7 +10292,7 @@ paths:
       tags:
         - Tasks
       summary: Create task
-      description: Create a project task and optionally queue its first iteration immediately. Returns `409 SOURCE_CONTEXT_CHANGED` if the primary repository selection is ambiguous, or the saved source context/Git grant is invalid or no longer matches the attached source when the first iteration is queued.
+      description: Create a project task and optionally queue its first iteration immediately. Returns `409 SOURCE_CONTEXT_CHANGED` if the primary repository selection is ambiguous, or the saved source context/Git grant is invalid or no longer matches the attached source when the first iteration is queued. Uploads become task_created metadata attachments and initial execution inputs atomically. Pending/consumed uploads return 409 UPLOAD_NOT_READY/UPLOAD_ALREADY_CONSUMED; expired uploads return 410 UPLOAD_EXPIRED. Invisible uploads/inputs return 404 NOT_FOUND. Invalid selections or metadata over 4096 bytes return 422 VALIDATION_ERROR; existing files without immutable identity return 409 ARTIFACT_NOT_FINALIZED. Changed/unavailable inputs return 422 INPUT_ARTIFACT_NOT_AVAILABLE. Input or staged object lock contention returns 503 ARTIFACT_STORAGE_UNAVAILABLE; retry is allowed. All these failures roll back the complete creation.
       operationId: tasksCreate
       parameters:
         - $ref: '#/components/parameters/TaskProjectIdPath'
@@ -10024,6 +10324,12 @@ paths:
           $ref: '#/components/responses/TasksNotFound'
         '409':
           $ref: '#/components/responses/TasksConflict'
+        '410':
+          description: UPLOAD_EXPIRED; creation and upload consumption are rolled back.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
         '422':
           $ref: '#/components/responses/TasksExecutionStartRejected'
         '500':
@@ -10945,14 +11251,14 @@ paths:
       tags:
         - Tasks
       summary: Add task comment
-      description: 'Atomically creates the full comment and optionally an iteration with input artifact snapshots. VALIDATION_ERROR (422) covers invalid input lists, nonempty inputs without create_iteration: true, and a missing required or invalid Idempotency-Key for any comment. Unavailable or changed inputs, including artifacts deleted after preflight, return 422 INPUT_ARTIFACT_NOT_AVAILABLE without creating a comment. Artifacts missing or belonging to another task or tenant at the initial lookup return 404 NOT_FOUND. New comments on closed tasks return 409 TASK_CLOSED. Reusing a key with different request content, including a key used for direct iteration creation, returns 409 IDEMPOTENCY_KEY_CONFLICT. With create_iteration=true, a missing/invalid saved source context or Git grant, or a changed attached repository, returns `409 SOURCE_CONTEXT_CHANGED` without creating the comment or iteration.'
+      description: 'Atomically creates the full comment and optionally an iteration with input artifact snapshots. VALIDATION_ERROR (422) covers invalid input lists, nonempty inputs without create_iteration: true, and a missing required or invalid Idempotency-Key for any comment. Unavailable or changed inputs, including artifacts deleted after preflight, return 422 INPUT_ARTIFACT_NOT_AVAILABLE without creating a comment. Artifacts missing or belonging to another task or tenant at the initial lookup return 404 NOT_FOUND. New comments on closed tasks return 409 TASK_CLOSED. Reusing a key with different request content, including a key used for direct iteration creation, returns 409 IDEMPOTENCY_KEY_CONFLICT. With create_iteration=true, a missing/invalid saved source context or Git grant, or a changed attached repository, returns `409 SOURCE_CONTEXT_CHANGED` without creating the comment or iteration. Upload promotion, activity, iteration and input grants commit together; failures before commit roll back all writes. Staged mutex acquisition failures return 503 ARTIFACT_STORAGE_UNAVAILABLE and may be retried. An exception releasing a mutex after commit returns 5xx but keeps the accepted operation and flushes deferred signals; retry the same key and body to retrieve it. Storage accounting runs after successful unlock and is reconciled by cron-project-artifact-usage if unlock failed.'
       operationId: taskCommentCreate
       parameters:
         - $ref: '#/components/parameters/TaskIdPath'
         - name: Idempotency-Key
           in: header
           required: false
-          description: Required for nonempty input_artifact_ids; optional otherwise. Always applies, including to plain comments. An empty header is treated as absent. With nonempty input_artifact_ids, a missing or empty key returns 422 VALIDATION_ERROR with message "Idempotency-Key is required for input artifacts". Otherwise, a missing or empty key creates a new comment and optional iteration on each request. Nonempty keys must contain 1 to 128 printable ASCII characters without spaces; invalid keys return 422 VALIDATION_ERROR without writes. Scoped to this task, not the author, and shared by plain comments, comments with iterations and direct iterations. A different normalized request or operation returns 409 IDEMPOTENCY_KEY_CONFLICT. Generate a unique key for each new submission (for example, UUIDv4); reuse it only to retry that submission. Repeating the same key and normalized body returns the original comment_activity_id, iteration_id and initially accepted execution_ids with 201, without new records, events or realtime signals. Plain comment replay returns iteration_id null and execution_ids []. Replay precedes mutable task, input and executor revalidation, including on a closed task, but still requires current access. Another authorized user may replay the request; the original author is preserved. Body is trimmed; executor and artifact ID order is ignored for fingerprinting.
+          description: Required for nonempty input_artifact_ids or attachment_upload_ids; optional otherwise. Always applies, including to plain comments. An empty header is treated as absent. With nonempty input_artifact_ids, a missing or empty key returns 422 VALIDATION_ERROR with message "Idempotency-Key is required for input artifacts". With only attachment_upload_ids, a missing or empty key returns 422 VALIDATION_ERROR with message "Idempotency-Key is required for attachment uploads". The sorted unique upload set participates in the fingerprint; omission equals an empty list. Structural ID/list validation precedes replay. Upload state checks follow replay under the task lock. Otherwise, a missing or empty key creates a new comment and optional iteration on each request. Nonempty keys must contain 1 to 128 printable ASCII characters without spaces; invalid keys return 422 VALIDATION_ERROR without writes. Scoped to this task, not the author, and shared by plain comments, comments with iterations and direct iterations. A different normalized request or operation returns 409 IDEMPOTENCY_KEY_CONFLICT. Generate a unique key for each new submission (for example, UUIDv4); reuse it only to retry that submission. Repeating the same key and normalized body returns the original comment_activity_id, iteration_id and initially accepted execution_ids with 201, without new records, events or realtime signals. Plain comment replay returns iteration_id null and execution_ids []. Replay precedes mutable task, input and executor revalidation, including on a closed task, but still requires current access. Another authorized user may replay the request; the original author is preserved. Body is trimmed; executor and artifact ID order is ignored for fingerprinting.
           schema:
             type: string
             minLength: 0
@@ -10985,7 +11291,9 @@ paths:
         '404':
           $ref: '#/components/responses/TasksNotFound'
         '409':
-          $ref: '#/components/responses/TasksConflict'
+          $ref: '#/components/responses/TasksAttachmentConflict'
+        '410':
+          $ref: '#/components/responses/TasksAttachmentExpired'
         '422':
           $ref: '#/components/responses/TasksExecutionStartRejected'
         '500':
@@ -11046,14 +11354,14 @@ paths:
       tags:
         - Tasks
       summary: Create task iteration
-      description: Unavailable or changed inputs, including artifacts deleted after preflight, return 422 INPUT_ARTIFACT_NOT_AVAILABLE without creating an iteration. Artifacts missing or belonging to another task or tenant at the initial lookup return 404 NOT_FOUND. A missing/invalid saved source context or Git grant, or a changed attached repository, returns `409 SOURCE_CONTEXT_CHANGED` without creating an iteration.
+      description: Unavailable or changed inputs, including artifacts deleted after preflight, return 422 INPUT_ARTIFACT_NOT_AVAILABLE without creating an iteration. Artifacts missing or belonging to another task or tenant at the initial lookup return 404 NOT_FOUND. A missing/invalid saved source context or Git grant, or a changed attached repository, returns `409 SOURCE_CONTEXT_CHANGED` without creating an iteration. Upload promotion, activity, iteration and input grants commit together; failures before commit roll back all writes. Staged mutex acquisition failures return 503 ARTIFACT_STORAGE_UNAVAILABLE and may be retried. An exception releasing a mutex after commit returns 5xx but keeps the accepted operation and flushes deferred signals; retry the same key and body to retrieve it. Storage accounting runs after successful unlock and is reconciled by cron-project-artifact-usage if unlock failed.
       operationId: taskIterationCreate
       parameters:
         - $ref: '#/components/parameters/TaskIdPath'
         - name: Idempotency-Key
           in: header
           required: false
-          description: Required for nonempty input_artifact_ids; optional otherwise. An empty header is treated as absent. With nonempty input_artifact_ids, a missing or empty key returns 422 VALIDATION_ERROR with message "Idempotency-Key is required for input artifacts". Otherwise, a missing or empty key creates a new iteration on each request. Nonempty keys must contain 1 to 128 printable ASCII characters without spaces; invalid keys return 422 VALIDATION_ERROR. These rules apply to both manual and retry triggers. Scoped to this task, not the author, and shared with all comment request keys, including plain comments; same key with a different fingerprint or operation returns 409 IDEMPOTENCY_KEY_CONFLICT. Repeating the same key and body after a timeout safely returns 201 with the previously accepted iteration and the initially accepted execution_ids before mutable task/input/executor revalidation, including on a closed task. Replay still requires current access, preserves the original author and creates no records, events or realtime signals. Mutable iteration fields such as status, completed_at and updated_at may reflect current state; the original HTTP response is not stored and byte-for-byte JSON equality is not guaranteed. Leading and trailing whitespace in reason is trimmed before fingerprinting and storage; differences inside the reason remain significant.
+          description: Required for nonempty input_artifact_ids or attachment_upload_ids; optional otherwise. An empty header is treated as absent. With nonempty input_artifact_ids, a missing or empty key returns 422 VALIDATION_ERROR with message "Idempotency-Key is required for input artifacts". Otherwise, a missing or empty key creates a new iteration on each request. Nonempty keys must contain 1 to 128 printable ASCII characters without spaces; invalid keys return 422 VALIDATION_ERROR. These rules apply to both manual and retry triggers. Scoped to this task, not the author, and shared with all comment request keys, including plain comments; same key with a different fingerprint or operation returns 409 IDEMPOTENCY_KEY_CONFLICT. Repeating the same key and body after a timeout safely returns 201 with the previously accepted iteration and the initially accepted execution_ids before mutable task/input/executor revalidation, including on a closed task. Replay still requires current access, preserves the original author and creates no records, events or realtime signals. Mutable iteration fields such as status, completed_at and updated_at may reflect current state; the original HTTP response is not stored and byte-for-byte JSON equality is not guaranteed. With only attachment_upload_ids, a missing or empty key returns 422 VALIDATION_ERROR with message "Idempotency-Key is required for attachment uploads". The sorted unique upload set participates in the fingerprint; omission equals an empty list. Structural ID/list validation precedes replay. Upload state checks follow replay under the task lock. Leading and trailing whitespace in reason is trimmed before fingerprinting and storage; differences inside the reason remain significant.
           schema:
             type: string
             minLength: 0
@@ -11086,7 +11394,9 @@ paths:
         '404':
           $ref: '#/components/responses/TasksNotFound'
         '409':
-          $ref: '#/components/responses/TasksConflict'
+          $ref: '#/components/responses/TasksAttachmentConflict'
+        '410':
+          $ref: '#/components/responses/TasksAttachmentExpired'
         '422':
           $ref: '#/components/responses/TasksExecutionStartRejected'
         '500':
@@ -18198,6 +18508,120 @@ components:
               description: Only installations whose ownership was confirmed in this request. State remains unused; the OAuth code is spent.
               items:
                 $ref: '#/components/schemas/GithubInstallationCandidate'
+    GitlabConnectLinks:
+      type: object
+      required:
+        - message
+        - authorize_url
+        - expires_at
+      properties:
+        message:
+          type: string
+        authorize_url:
+          type: string
+          format: uri
+          description: Authorize the platform OAuth application at GitLab.com. The redirect URI is mandatory and must exactly match the registered frontend callback. Reuse this URL with its unexpired state to obtain a fresh code after namespace selection or a rolled-back transaction.
+        expires_at:
+          type: string
+          format: date-time
+          description: State expiry in UTC; default lifetime is 900 seconds, including selection and reauthorization.
+    GitlabFinalizeRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - state
+        - code
+      description: Authorize with state and code; optionally select a numeric namespace_id. State is verified before fields. Selection always needs a new code and fresh ownership verification.
+      properties:
+        state:
+          type: string
+          minLength: 1
+          maxLength: 2048
+          writeOnly: true
+          description: Signed one-use connect session bound to the authenticated tenant and user.
+        code:
+          type: string
+          minLength: 1
+          maxLength: 255
+          writeOnly: true
+          description: One-time GitLab OAuth authorization code, never retried automatically.
+        namespace_id:
+          type: integer
+          format: int64
+          minimum: 1
+          description: External GitLab namespace number, never an encoded platform ID. JSON strings are rejected.
+    GitlabNamespaceCandidate:
+      type: object
+      additionalProperties: false
+      required:
+        - namespace_id
+        - full_path
+        - kind
+      properties:
+        namespace_id:
+          type: integer
+          format: int64
+          minimum: 1
+          description: External GitLab number; not idEncode transformed.
+        full_path:
+          type: string
+        kind:
+          type: string
+          enum:
+            - user
+            - group
+    GitlabNamespaceConflictResponse:
+      type: object
+      required:
+        - status
+        - error
+      properties:
+        status:
+          type: string
+          enum:
+            - error
+        error:
+          type: object
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+              enum:
+                - NAMESPACE_ALREADY_CONNECTED
+            message:
+              type: string
+          additionalProperties: false
+    GitlabNamespaceSelectionResponse:
+      type: object
+      required:
+        - status
+        - error
+      properties:
+        status:
+          type: string
+          enum:
+            - error
+        error:
+          type: object
+          required:
+            - code
+            - message
+            - details
+          properties:
+            code:
+              type: string
+              enum:
+                - NAMESPACE_SELECTION_REQUIRED
+            message:
+              type: string
+            details:
+              type: array
+              minItems: 2
+              description: Only namespaces whose ownership was confirmed in this request. State remains unused; the OAuth code is spent.
+              items:
+                $ref: '#/components/schemas/GitlabNamespaceCandidate'
     IntegrationId:
       type: string
       description: Integration identifier (prefix "int")
@@ -20706,6 +21130,101 @@ components:
       description: Tasks module activity identifier (prefix "act")
       pattern: ^act_[a-zA-Z0-9]{6,}$
       example: act_aB3xYz
+    TaskArtifactUploadId:
+      type: string
+      description: Staged artifact upload identifier (prefix "tau")
+      pattern: ^tau_[a-zA-Z0-9]{6,}$
+      example: tau_aB3xYz
+    TaskArtifactUploadCreateRequestBody:
+      type: object
+      required:
+        - filename
+        - size_bytes
+      properties:
+        filename:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Unicode basename preserved for display; path components and unsafe characters are sanitized. The storage key uses a separate ASCII suffix.
+        size_bytes:
+          type: integer
+          minimum: 1
+          description: Declared byte length; maximum from artifact_uploads.max_size_bytes (default 52428800).
+        content_type:
+          type: string
+          minLength: 1
+          maxLength: 255
+          nullable: true
+          default: application/octet-stream
+          pattern: ^[\x20-\x7E]*[\x21-\x7E][\x20-\x7E]*$
+          description: Arbitrary media type using printable ASCII, nonblank after trimming; surrounding spaces are removed before signing. Omitted or null uses application/octet-stream.
+    TaskArtifactUploadCreateResponseData:
+      type: object
+      required:
+        - id
+        - upload
+        - max_size_bytes
+        - expires_at
+      properties:
+        id:
+          $ref: '#/components/schemas/TaskArtifactUploadId'
+        upload:
+          type: object
+          required:
+            - url
+            - method
+            - headers
+          properties:
+            url:
+              type: string
+              format: uri
+            method:
+              type: string
+              enum:
+                - PUT
+            headers:
+              type: object
+              required:
+                - Content-Type
+                - Content-Length
+              properties:
+                Content-Type:
+                  type: string
+                Content-Length:
+                  type: string
+                  pattern: ^[0-9]+$
+              description: Signed headers. Browser sets Content-Length from the file body automatically.
+        max_size_bytes:
+          type: integer
+          minimum: 1
+        expires_at:
+          type: string
+          format: date-time
+          description: Expiry of the PUT URL, not the staged record (default record TTL is 24 hours).
+    TaskArtifactUploadFinalizeResponseData:
+      type: object
+      required:
+        - id
+        - status
+        - message
+        - size_bytes
+        - filename
+      properties:
+        id:
+          $ref: '#/components/schemas/TaskArtifactUploadId'
+        status:
+          type: string
+          enum:
+            - finalized
+        message:
+          type: string
+        size_bytes:
+          type: integer
+          minimum: 0
+          description: Size of the accepted immutable revision.
+        filename:
+          type: string
+          maxLength: 200
     TaskArtifactId:
       type: string
       description: Tasks module artifact identifier (prefix "art")
@@ -22050,6 +22569,8 @@ components:
           items:
             $ref: '#/components/schemas/TaskIterationInputArtifact'
           description: Present only when the accepted input snapshot is nonempty.
+        metadata:
+          $ref: '#/components/schemas/TaskActivityMetadata'
       additionalProperties: false
     TaskExecutionProgressPercent:
       description: The callback validates but does not cast this value. Public activity JSON preserves an integer in 0..100, null (also when omitted), or the accepted string verbatim. Strings may contain a decimal integer in 0..100 with an optional plus sign and surrounding spaces, tabs, CR, LF or vertical tabs; negative zero is also accepted. The empty string is accepted as an optional value and remains empty. FE must handle these forms before displaying a percentage; the public projection preserves the callback value.
@@ -22173,6 +22694,8 @@ components:
         number:
           type: integer
           minimum: 1
+        metadata:
+          $ref: '#/components/schemas/TaskActivityMetadata'
     TaskTaskUpdatedActivityPayload:
       type: object
       required:
@@ -22205,9 +22728,11 @@ components:
       maxProperties: 0
       additionalProperties: false
     TaskUserCommentActivityPayload:
-      description: Exactly {} in both public feeds and WS. Text is in task/WS body; project body is null.
+      description: Empty object or attachment metadata. Text is in task/WS body; project body is null. Project visibility depends on the configured activity kind filter.
       type: object
-      maxProperties: 0
+      properties:
+        metadata:
+          $ref: '#/components/schemas/TaskActivityMetadata'
       additionalProperties: false
     TaskExecutionStartedActivityPayload:
       type: object
@@ -24002,6 +24527,19 @@ components:
     TaskCreateRequestBody:
       type: object
       properties:
+        attachment_upload_ids:
+          type: array
+          uniqueItems: true
+          description: Finalized, unexpired uploads owned by the current user in this tenant and project. Empty is equivalent to omission. Configurable maximum defaults to 20; expanded activity metadata must also fit 4096 bytes. Consumed atomically with task creation.
+          items:
+            $ref: '#/components/schemas/TaskArtifactUploadId'
+        input_artifact_ids:
+          type: array
+          maxItems: 100
+          uniqueItems: true
+          description: Existing artifacts for the first iteration only; empty is equivalent to omission. Requires effective start_immediately=true (the default) and cross_task_enabled=true, otherwise 422 and 404 respectively. The combined selection with uploads must fit execution_inputs.max_artifacts. Existing artifacts do not enter task.attachments.
+          items:
+            $ref: '#/components/schemas/TaskArtifactId'
         source_activity_id:
           description: Agent message from a non-deleted task in the same project and tenant. Omitted and null values are equivalent. Invalid sources return 422 VALIDATION_ERROR with details[].field = source_activity_id before creation. Source validity is checked once before the creation transaction; deletion after that check does not prevent creation of the historical reference.
           anyOf:
@@ -24134,6 +24672,13 @@ components:
             $ref: '#/components/schemas/AgentId'
         source_execution_id:
           $ref: '#/components/schemas/TaskExecutionId'
+        attachment_upload_ids:
+          type: array
+          uniqueItems: true
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/TaskArtifactUploadId'
+          description: Finalized, unexpired staged uploads owned by the current user in this task's tenant and project. Empty equals omitted. Limited by artifact_uploads.max_attachments_per_request (default 20) and 4096 bytes of expanded activity metadata. Requires Idempotency-Key even for a plain comment. When creating an iteration, uploads plus input_artifact_ids must not exceed min(100, execution_inputs.max_artifacts). Promoted artifacts become this iteration's inputs, without inheriting attachments from earlier comments. Plain comments accept uploads without an iteration.
         input_artifact_ids:
           type: array
           uniqueItems: true
@@ -24160,6 +24705,13 @@ components:
           maxLength: 2000
         source_execution_id:
           $ref: '#/components/schemas/TaskExecutionId'
+        attachment_upload_ids:
+          type: array
+          uniqueItems: true
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/TaskArtifactUploadId'
+          description: Finalized, unexpired staged uploads owned by the current user in this task's tenant and project. Empty equals omitted. Limited by artifact_uploads.max_attachments_per_request (default 20) and 4096 bytes of expanded activity metadata. Requires Idempotency-Key. Uploads plus input_artifact_ids must not exceed min(100, execution_inputs.max_artifacts). Promoted artifacts become this iteration's inputs, without inheriting attachments from earlier comments.
         input_artifact_ids:
           description: Unique encoded input IDs. With TASK_EXECUTION_INPUT_CROSS_TASK_ENABLED=true, accepts artifacts of any live task/project in the same tenant accessible through source-project canAccess(); otherwise accepts only this task. Selection intentionally transfers the pinned revision to target-project executors and its contents may be visible to target participants without source access. Allowed kinds are file, report, preview, diff, attachment (immutable stored revisions) and external_link (URL only). Inaccessible/foreign-tenant/missing/deleted sources return 404 NOT_FOUND; unsupported kind returns 422 INPUT_ARTIFACT_NOT_AVAILABLE (reason=unsupported_kind); missing immutable revision returns 409 ARTIFACT_NOT_FINALIZED. Source ACL revocation or disabling the flag does not revoke accepted grants. Replay reuses the accepted decision without new grants and still requires target access. derived_from, publications and source_execution_id remain same-task. Selection applies only to executions of the new iteration.
           type: array
@@ -26411,6 +26963,18 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/StandardErrorResponse'
+    TasksAttachmentExpired:
+      description: UPLOAD_EXPIRED, including expiry while waiting for the staged mutex. All acceptance writes roll back.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/StandardErrorResponse'
+    TasksAttachmentConflict:
+      description: TASK_CLOSED, IDEMPOTENCY_KEY_CONFLICT, SOURCE_CONTEXT_CHANGED, ARTIFACT_NOT_FINALIZED, UPLOAD_ALREADY_CONSUMED or UPLOAD_NOT_READY. No partial consumption before commit.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/StandardErrorResponse'
     TasksChangesNotFound:
       description: CHANGES_NOT_AVAILABLE when Git Mirror rejects the request and no applicable fallback exists; TASK_NOT_FOUND or PROJECT_NOT_FOUND for an absent task or project.
       content:
@@ -26529,7 +27093,7 @@ components:
                   code: COMPUTE_HOURS_EXHAUSTED
                   message: Compute hours are exhausted
     TasksBillingDependencyUnavailable:
-      description: DEPENDENCY_UNAVAILABLE. Execution-start checks require billingEnforcementService.checkExecutionStart (source billing); a billing failure rolls back the launch transaction without creating executions or consuming task counters. Source metadata/default-branch lookups may also fail (source projects or integrations), and legacy automation setup may fail while resolving project agents (source agent, assignmentService.listByProject). Project lookup via projectService.get and activity snapshots use local source projects and the invoked projectService method. Failed lookups are not cached. Public details contain only source and operation; no upstream payload or debug metadata is returned. Local details[].source/operation identify projects and the invoked projectService method.
+      description: DEPENDENCY_UNAVAILABLE. Execution-start checks require billingEnforcementService.checkExecutionStart (source billing); a billing failure rolls back the launch transaction without creating executions or consuming task counters. Source metadata/default-branch lookups may also fail (source projects or integrations), and legacy automation setup may fail while resolving project agents (source agent, assignmentService.listByProject). Project lookup via projectService.get and activity snapshots use local source projects and the invoked projectService method. Failed lookups are not cached. Public details contain only source and operation; no upstream payload or debug metadata is returned. Local details[].source/operation identify projects and the invoked projectService method. Iteration/comment attachment acceptance also returns ARTIFACT_STORAGE_UNAVAILABLE on staged mutex acquisition failure; retry is allowed.
       content:
         application/json:
           schema:
