@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: SynthStack Backend API
-  version: v2.30.0+23935
+  version: v2.31.0+24150
   contact:
     name: SynthStack
     url: https://synthstack.ai
