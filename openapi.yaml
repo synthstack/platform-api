@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: SynthStack Backend API
-  version: v2.31.0+24150
+  version: v2.32.0+24473
   contact:
     name: SynthStack
     url: https://synthstack.ai
@@ -9,6 +9,27 @@ info:
     SynthStack Backend API, assembled from module-level OpenAPI fragments.
     Edit openapi.template.yml for shared metadata and apps/*/openapi.paths.yml
     for endpoint contracts, then rebuild the published JSON specifications.
+
+    The common bearerAuth guard accepts JWT or organization API keys (sk_syn_ plus
+    40 base62 characters). X-API-Key is an alternative only without Authorization;
+    sending both headers returns 401 UNAUTHORIZED before verification, even if
+    either value is empty. In requests authenticated by a key, the creator's
+    current organization role applies and auth.is_superadmin is always false. Valid keys
+    cannot access guarded /admin, /auth, /account, /oauth or /tenant/api-keys paths
+    (segment prefixes); these return 403 API_KEY_FORBIDDEN. Team also rejects any
+    email field in PATCH /console-members/{id} authenticated by a key. Other team
+    fields remain allowed within the creator's role. Invalid keys return 401 first.
+    These rules apply to operations using the common bearerAuth guard. Public
+    operations with security: [] and separate authentication protocols do not
+    accept API keys as credentials; their existing header handling and errors
+    remain unchanged. X-API-Key has no effect on those operations.
+
+    Since team 2.1.0, PATCH /console-members/{id} additionally forbids changing
+    another platform superadmin's login email, regardless of authentication method
+    or the actor's platform privileges (403 PLATFORM_ADMIN_ACCOUNT_PROTECTED).
+    This includes JWT requests from an owner invited using an API key. JWT owners
+    may still change ordinary members' email and their own email. This changes the
+    existing JWT contract; clients must handle the additional 403 response.
 servers:
   - url: https://api.synthstack.ai/v2
     description: Production environment
@@ -10096,7 +10117,7 @@ paths:
         - Tasks
       summary: Issue a presigned PUT target for a user artifact
       operationId: taskArtifactUploadCreate
-      description: Requires tenant and project access. Limited to 10 requests/minute per user, fail-closed. Both Content-Length and Content-Type are signed. The upload belongs to its creator; it must be finalized before the staged record expires. No task artifact is created here.
+      description: Requires tenant and project access. Limited to 10 requests/minute per user, fail-closed. Both Content-Length and Content-Type are signed. The upload belongs to its creator; both finalization and attachment must complete before the staged record expires (2 hours by default). A configurable soft limit (50 by default) of unexpired pending/finalized uploads per user within one tenant/project applies before presigning; UPLOAD_LIMIT_EXCEEDED includes details [{limit, active}]. Expired and consumed uploads do not count. No task artifact is created here.
       parameters:
         - $ref: '#/components/parameters/TaskProjectIdPath'
       requestBody:
@@ -10131,6 +10152,12 @@ paths:
           $ref: '#/components/responses/TasksForbidden'
         '404':
           $ref: '#/components/responses/TasksNotFound'
+        '409':
+          description: UPLOAD_LIMIT_EXCEEDED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
         '422':
           description: VALIDATION_ERROR or SIZE_EXCEEDS_LIMIT
           content:
@@ -10724,6 +10751,7 @@ paths:
         - Tasks
       summary: Create task label
       operationId: taskLabelCreate
+      description: A duplicate normalized name in this project returns 409 TASK_LABEL_NAME_CONFLICT with error.details identifying the name field.
       parameters:
         - $ref: '#/components/parameters/TaskProjectIdPath'
       requestBody:
@@ -10752,19 +10780,21 @@ paths:
           $ref: '#/components/responses/TasksForbidden'
         '404':
           $ref: '#/components/responses/TasksNotFound'
+        '409':
+          $ref: '#/components/responses/TasksConflict'
         '422':
           $ref: '#/components/responses/TasksValidationError'
         '500':
           $ref: '#/components/responses/TasksProjectDependencyError'
         '503':
           $ref: '#/components/responses/TasksProjectDependencyUnavailable'
-      description: Create task label
   /tasks/labels/{id}:
     patch:
       tags:
         - Tasks
       summary: Update task label
       operationId: taskLabelUpdate
+      description: A normalized name used by another label in this project returns 409 TASK_LABEL_NAME_CONFLICT with error.details identifying the name field. Reusing this label's own name is allowed.
       parameters:
         - $ref: '#/components/parameters/TaskLabelIdPath'
       requestBody:
@@ -10793,13 +10823,14 @@ paths:
           $ref: '#/components/responses/TasksForbidden'
         '404':
           $ref: '#/components/responses/TasksNotFound'
+        '409':
+          $ref: '#/components/responses/TasksConflict'
         '422':
           $ref: '#/components/responses/TasksValidationError'
         '500':
           $ref: '#/components/responses/TasksProjectDependencyError'
         '503':
           $ref: '#/components/responses/TasksProjectDependencyUnavailable'
-      description: Update task label
     delete:
       tags:
         - Tasks
@@ -11251,7 +11282,7 @@ paths:
       tags:
         - Tasks
       summary: Add task comment
-      description: 'Atomically creates the full comment and optionally an iteration with input artifact snapshots. VALIDATION_ERROR (422) covers invalid input lists, nonempty inputs without create_iteration: true, and a missing required or invalid Idempotency-Key for any comment. Unavailable or changed inputs, including artifacts deleted after preflight, return 422 INPUT_ARTIFACT_NOT_AVAILABLE without creating a comment. Artifacts missing or belonging to another task or tenant at the initial lookup return 404 NOT_FOUND. New comments on closed tasks return 409 TASK_CLOSED. Reusing a key with different request content, including a key used for direct iteration creation, returns 409 IDEMPOTENCY_KEY_CONFLICT. With create_iteration=true, a missing/invalid saved source context or Git grant, or a changed attached repository, returns `409 SOURCE_CONTEXT_CHANGED` without creating the comment or iteration. Upload promotion, activity, iteration and input grants commit together; failures before commit roll back all writes. Staged mutex acquisition failures return 503 ARTIFACT_STORAGE_UNAVAILABLE and may be retried. An exception releasing a mutex after commit returns 5xx but keeps the accepted operation and flushes deferred signals; retry the same key and body to retrieve it. Storage accounting runs after successful unlock and is reconciled by cron-project-artifact-usage if unlock failed.'
+      description: 'Atomically creates the full comment and optionally an iteration with input artifact snapshots. VALIDATION_ERROR (422) covers invalid input lists, nonempty inputs without create_iteration: true, and a missing required or invalid Idempotency-Key for any comment. Unavailable or changed inputs, including artifacts deleted after preflight, return 422 INPUT_ARTIFACT_NOT_AVAILABLE without creating a comment. Artifacts missing or belonging to another task or tenant at the initial lookup return 404 NOT_FOUND. New comments on closed tasks return 409 TASK_CLOSED. Reusing a key with different request content, including a key used for direct iteration creation, returns 409 IDEMPOTENCY_KEY_CONFLICT. With create_iteration=true, a missing/invalid saved source context or Git grant, or a changed attached repository, returns `409 SOURCE_CONTEXT_CHANGED` without creating the comment or iteration. Upload promotion, activity, iteration and input grants commit together; failures before commit roll back all writes. Input or staged mutex acquisition failures return 503 ARTIFACT_STORAGE_UNAVAILABLE and may be retried. An exception releasing a mutex after commit returns 5xx but keeps the accepted operation and flushes deferred signals; retry the same key and body to retrieve it. Storage accounting runs after successful unlock and is reconciled by cron-project-artifact-usage if unlock failed.'
       operationId: taskCommentCreate
       parameters:
         - $ref: '#/components/parameters/TaskIdPath'
@@ -11354,7 +11385,7 @@ paths:
       tags:
         - Tasks
       summary: Create task iteration
-      description: Unavailable or changed inputs, including artifacts deleted after preflight, return 422 INPUT_ARTIFACT_NOT_AVAILABLE without creating an iteration. Artifacts missing or belonging to another task or tenant at the initial lookup return 404 NOT_FOUND. A missing/invalid saved source context or Git grant, or a changed attached repository, returns `409 SOURCE_CONTEXT_CHANGED` without creating an iteration. Upload promotion, activity, iteration and input grants commit together; failures before commit roll back all writes. Staged mutex acquisition failures return 503 ARTIFACT_STORAGE_UNAVAILABLE and may be retried. An exception releasing a mutex after commit returns 5xx but keeps the accepted operation and flushes deferred signals; retry the same key and body to retrieve it. Storage accounting runs after successful unlock and is reconciled by cron-project-artifact-usage if unlock failed.
+      description: Unavailable or changed inputs, including artifacts deleted after preflight, return 422 INPUT_ARTIFACT_NOT_AVAILABLE without creating an iteration. Artifacts missing or belonging to another task or tenant at the initial lookup return 404 NOT_FOUND. A missing/invalid saved source context or Git grant, or a changed attached repository, returns `409 SOURCE_CONTEXT_CHANGED` without creating an iteration. Upload promotion, activity, iteration and input grants commit together; failures before commit roll back all writes. Input or staged mutex acquisition failures return 503 ARTIFACT_STORAGE_UNAVAILABLE and may be retried. An exception releasing a mutex after commit returns 5xx but keeps the accepted operation and flushes deferred signals; retry the same key and body to retrieve it. Storage accounting runs after successful unlock and is reconciled by cron-project-artifact-usage if unlock failed.
       operationId: taskIterationCreate
       parameters:
         - $ref: '#/components/parameters/TaskIdPath'
@@ -11573,6 +11604,38 @@ paths:
         '503':
           $ref: '#/components/responses/TasksServiceUnavailable'
   /tasks/artifacts/{id}:
+    get:
+      tags:
+        - Tasks
+      summary: Get a task artifact with project and task context
+      description: Returns metadata with the same visibility as the tenant artifact catalog. Missing or inaccessible artifacts, deleted tasks or projects, inconsistent project context, git_bundle, and invalid public IDs all return the canonical 404 body {"status":"error","error":{"code":"ARTIFACT_NOT_FOUND","message":"Not found"}} (identical when debug=false). This includes decoding failures in the path and recognized ID query fields. No query parameters are defined or used; other query fields are ignored. git_bundle is hidden before loading the task or resolving the project, so project dependency failures cannot expose it. Such failures remain 500/503 for ordinary artifacts. download_url is a stable authenticated path under the API mount, or null for external_link. Object storage existence and finalization are not checked by this endpoint.
+      operationId: taskArtifactGet
+      parameters:
+        - $ref: '#/components/parameters/TaskArtifactIdPath'
+      responses:
+        '200':
+          description: Artifact metadata with project and task context.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/StandardResponse'
+                  - type: object
+                    required:
+                      - data
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/TaskArtifactDetailResponseData'
+        '401':
+          $ref: '#/components/responses/TasksUnauthorized'
+        '403':
+          $ref: '#/components/responses/TasksForbidden'
+        '404':
+          $ref: '#/components/responses/TasksNotFound'
+        '500':
+          $ref: '#/components/responses/TasksProjectDependencyError'
+        '503':
+          $ref: '#/components/responses/TasksServiceUnavailable'
     delete:
       tags:
         - Tasks
@@ -13544,7 +13607,7 @@ paths:
       operationId: get_console_members_id
     patch:
       summary: Update console member
-      description: Updates any subset of full name, email, and role. Supplied fields must be non-null and nonblank after trimming; an empty object makes no field changes. Unknown fields are ignored. Only tenant owners may perform this operation.
+      description: Updates any subset of full name, email, and role. Supplied fields must be non-null and nonblank after trimming; an empty object makes no field changes. Unknown fields are ignored. Only tenant owners may perform this operation. API-key authentication rejects any email field with API_KEY_FORBIDDEN; full_name and role remain allowed. Since team 2.1.0, changing another platform superadmin's login email returns PLATFORM_ADMIN_ACCOUNT_PROTECTED regardless of authentication method or the actor's platform privileges, including JWT obtained by an owner invited using an API key. A rejected update changes no fields. JWT owners may change ordinary members' email and their own email; an unchanged email in a JWT request is allowed.
       parameters:
         - name: id
           in: path
@@ -13594,7 +13657,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/StandardErrorResponse'
         '403':
-          description: Forbidden (not owner, or LAST_OWNER_REQUIRED when demoting the tenant's last active owner; pending or disabled owners do not count)
+          description: Forbidden (not owner, or LAST_OWNER_REQUIRED when demoting the tenant's last active owner; pending or disabled owners do not count); API_KEY_FORBIDDEN when an API key attempts to change email; PLATFORM_ADMIN_ACCOUNT_PROTECTED when changing another platform superadmin's email
           content:
             application/json:
               schema:
@@ -14689,7 +14752,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/StandardErrorResponse'
         '403':
-          description: TENANT_REQUIRED (missing membership/context), TENANT_INACTIVE, or FORBIDDEN (token tenant mismatch or neither owner/admin nor platform superadmin).
+          description: TENANT_REQUIRED, TENANT_INACTIVE, FORBIDDEN (tenant mismatch or insufficient membership), or API_KEY_FORBIDDEN for API-key authentication. A JWT platform superadmin with a valid tenant context passes requireOwnerOrAdmin regardless of membership role.
           content:
             application/json:
               schema:
@@ -14705,7 +14768,7 @@ paths:
       operationId: get_tenant_api_keys
     post:
       summary: Create tenant API key
-      description: Create a new API key for current tenant and return the one-time secret value.
+      description: Create a new API key for current tenant and return the one-time secret value (sk_syn_ plus 40 base62 characters). Requires a live owner/admin membership even for platform superadmins.
       security:
         - bearerAuth: []
       requestBody:
@@ -14747,7 +14810,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/StandardErrorResponse'
         '403':
-          description: TENANT_REQUIRED (missing membership/context), TENANT_INACTIVE, or FORBIDDEN (token tenant mismatch or neither owner/admin nor platform superadmin).
+          description: TENANT_REQUIRED, TENANT_INACTIVE, FORBIDDEN (tenant mismatch or insufficient membership), or API_KEY_FORBIDDEN for API-key authentication.
           content:
             application/json:
               schema:
@@ -14795,7 +14858,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/StandardErrorResponse'
         '403':
-          description: TENANT_REQUIRED (missing membership/context), TENANT_INACTIVE, or FORBIDDEN (token tenant mismatch or neither owner/admin nor platform superadmin).
+          description: TENANT_REQUIRED, TENANT_INACTIVE, FORBIDDEN (tenant mismatch or insufficient membership), or API_KEY_FORBIDDEN for API-key authentication. A JWT platform superadmin with a valid tenant context passes requireOwnerOrAdmin regardless of membership role.
           content:
             application/json:
               schema:
@@ -15185,7 +15248,8 @@ components:
     bearerAuth:
       type: http
       scheme: bearer
-      bearerFormat: JWT
+      bearerFormat: JWT or sk_syn_ API key
+      description: JWT session or organization API key sk_syn_ plus 40 base62 characters. Alternatively send X-API-Key without Authorization. Sending both headers returns 401 UNAUTHORIZED, even if either is empty. A request authenticated by a key uses its creator's current tenant role with auth.is_superadmin=false. Guarded /admin, /auth, /account, /oauth and /tenant/api-keys prefixes and member login-email changes are forbidden to keys. See info.description for scope, public operations, separate authentication protocols and the protection of other platform superadmins' email across authentication methods.
   schemas:
     AccountSettingsSttEngine:
       type: string
@@ -21200,7 +21264,7 @@ components:
         expires_at:
           type: string
           format: date-time
-          description: Expiry of the PUT URL, not the staged record (default record TTL is 24 hours).
+          description: Expiry of the PUT URL, not the staged record (default record TTL is 2 hours).
     TaskArtifactUploadFinalizeResponseData:
       type: object
       required:
@@ -23912,6 +23976,25 @@ components:
           required:
             - project_id
             - task
+    TaskArtifactDetailResponseData:
+      allOf:
+        - $ref: '#/components/schemas/TaskTenantArtifactDescriptorResponseData'
+        - type: object
+          properties:
+            project:
+              type: object
+              properties:
+                id:
+                  $ref: '#/components/schemas/ProjectId'
+                name:
+                  type: string
+              required:
+                - id
+                - name
+          required:
+            - project
+            - download_url
+            - result_metadata
     TaskTenantArtifactListResponseData:
       type: array
       items:
@@ -24632,7 +24715,9 @@ components:
       properties:
         name:
           type: string
+          minLength: 1
           maxLength: 50
+          description: At most 50 bytes before normalization. Saved after PHP trim; the normalized value must not be empty. Unique within the project, case- and accent-insensitively.
         color:
           type: string
           pattern: ^#[0-9a-fA-F]{6}$
@@ -24644,7 +24729,9 @@ components:
       properties:
         name:
           type: string
+          minLength: 1
           maxLength: 50
+          description: At most 50 bytes before normalization. Saved after PHP trim; the normalized value must not be empty. Unique within the project, case- and accent-insensitively.
         color:
           type: string
           pattern: ^#[0-9a-fA-F]{6}$
@@ -25891,6 +25978,14 @@ components:
           $ref: '#/components/schemas/ApiKeyId'
         tenant_id:
           $ref: '#/components/schemas/TenantId'
+        created_by_user_id:
+          anyOf:
+            - $ref: '#/components/schemas/UserId'
+            - type: string
+              nullable: true
+              enum:
+                - null
+          description: Creator account; null for legacy keys or a deleted account.
         name:
           type: string
         key_prefix:
@@ -25909,6 +26004,7 @@ components:
       required:
         - id
         - tenant_id
+        - created_by_user_id
         - name
         - key_prefix
         - status
@@ -27093,7 +27189,7 @@ components:
                   code: COMPUTE_HOURS_EXHAUSTED
                   message: Compute hours are exhausted
     TasksBillingDependencyUnavailable:
-      description: DEPENDENCY_UNAVAILABLE. Execution-start checks require billingEnforcementService.checkExecutionStart (source billing); a billing failure rolls back the launch transaction without creating executions or consuming task counters. Source metadata/default-branch lookups may also fail (source projects or integrations), and legacy automation setup may fail while resolving project agents (source agent, assignmentService.listByProject). Project lookup via projectService.get and activity snapshots use local source projects and the invoked projectService method. Failed lookups are not cached. Public details contain only source and operation; no upstream payload or debug metadata is returned. Local details[].source/operation identify projects and the invoked projectService method. Iteration/comment attachment acceptance also returns ARTIFACT_STORAGE_UNAVAILABLE on staged mutex acquisition failure; retry is allowed.
+      description: DEPENDENCY_UNAVAILABLE. Execution-start checks require billingEnforcementService.checkExecutionStart (source billing); a billing failure rolls back the launch transaction without creating executions or consuming task counters. Source metadata/default-branch lookups may also fail (source projects or integrations), and legacy automation setup may fail while resolving project agents (source agent, assignmentService.listByProject). Project lookup via projectService.get and activity snapshots use local source projects and the invoked projectService method. Failed lookups are not cached. Public details contain only source and operation; no upstream payload or debug metadata is returned. Local details[].source/operation identify projects and the invoked projectService method. Iteration/comment attachment acceptance also returns ARTIFACT_STORAGE_UNAVAILABLE on input or staged mutex acquisition failure; retry is allowed.
       content:
         application/json:
           schema:
