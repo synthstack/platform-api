@@ -1,35 +1,11 @@
 openapi: 3.0.3
 info:
   title: SynthStack Backend API
-  version: v2.33.0+24648
+  version: v2.34.0+24765
   contact:
     name: SynthStack
     url: https://synthstack.ai
-  description: |
-    SynthStack Backend API, assembled from module-level OpenAPI fragments.
-    Edit openapi.template.yml for shared metadata and apps/*/openapi.paths.yml
-    for endpoint contracts, then rebuild the published JSON specifications.
-
-    The common bearerAuth guard accepts JWT or organization API keys (sk_syn_ plus
-    40 base62 characters). X-API-Key is an alternative only without Authorization;
-    sending both headers returns 401 UNAUTHORIZED before verification, even if
-    either value is empty. In requests authenticated by a key, the creator's
-    current organization role applies and auth.is_superadmin is always false. Valid keys
-    cannot access guarded /admin, /auth, /account, /oauth or /tenant/api-keys paths
-    (segment prefixes); these return 403 API_KEY_FORBIDDEN. Team also rejects any
-    email field in PATCH /console-members/{id} authenticated by a key. Other team
-    fields remain allowed within the creator's role. Invalid keys return 401 first.
-    These rules apply to operations using the common bearerAuth guard. Public
-    operations with security: [] and separate authentication protocols do not
-    accept API keys as credentials; their existing header handling and errors
-    remain unchanged. X-API-Key has no effect on those operations.
-
-    Since team 2.1.0, PATCH /console-members/{id} additionally forbids changing
-    another platform superadmin's login email, regardless of authentication method
-    or the actor's platform privileges (403 PLATFORM_ADMIN_ACCOUNT_PROTECTED).
-    This includes JWT requests from an owner invited using an API key. JWT owners
-    may still change ordinary members' email and their own email. This changes the
-    existing JWT contract; clients must handle the additional 403 response.
+  description: API for managing SynthStack projects, tasks, and organization resources.
 servers:
   - url: https://api.synthstack.ai/v2
     description: Production environment
@@ -5302,11 +5278,7 @@ paths:
           in: query
           required: false
           schema:
-            type: string
-            enum:
-              - active
-              - disabled
-              - error
+            $ref: '#/components/schemas/IntegrationStatus'
         - name: search
           in: query
           required: false
@@ -5789,7 +5761,7 @@ paths:
   /integrations/{id}/enable:
     post:
       summary: Enable integration
-      description: Set integration status to `active`. The actual transition records an integration.enabled outbox event. Repeated calls already at active return 200 without another event. A subsequent POST /integrations/{id}/test checks connectivity. Requires tenant owner/admin or a superadmin with tenant context.
+      description: Enable the integration. If a provider system error recorded while disabled has not yet been superseded by a saved connection test result, disabled or error transitions to pending with message `Integration enabled; connection test required`, and pending returns the same response without a transition. Otherwise the target is active with message `Integration enabled`. Each actual transition records an integration.enabled outbox event; repeated calls already at the target return 200 without another event. Further system errors preserve the connection test requirement. POST /integrations/{id}/test saves active or error and clears that requirement. Requires tenant owner/admin or a superadmin with tenant context.
       operationId: integrationEnable
       parameters:
         - name: id
@@ -13607,7 +13579,7 @@ paths:
       operationId: get_console_members_id
     patch:
       summary: Update console member
-      description: Updates any subset of full name, email, and role. Supplied fields must be non-null and nonblank after trimming; an empty object makes no field changes. Unknown fields are ignored. Only tenant owners may perform this operation. API-key authentication rejects any email field with API_KEY_FORBIDDEN; full_name and role remain allowed. Since team 2.1.0, changing another platform superadmin's login email returns PLATFORM_ADMIN_ACCOUNT_PROTECTED regardless of authentication method or the actor's platform privileges, including JWT obtained by an owner invited using an API key. A rejected update changes no fields. JWT owners may change ordinary members' email and their own email; an unchanged email in a JWT request is allowed.
+      description: Update a member's full name, email, or role. Requires the tenant owner role. Include only fields to change; supplied values must be non-null and nonblank. Supplying email requires JWT authentication. Another platform administrator's email is protected.
       parameters:
         - name: id
           in: path
@@ -13657,7 +13629,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/StandardErrorResponse'
         '403':
-          description: Forbidden (not owner, or LAST_OWNER_REQUIRED when demoting the tenant's last active owner; pending or disabled owners do not count); API_KEY_FORBIDDEN when an API key attempts to change email; PLATFORM_ADMIN_ACCOUNT_PROTECTED when changing another platform superadmin's email
+          description: Owner role required, last active owner protected (LAST_OWNER_REQUIRED), email update forbidden for API keys (API_KEY_FORBIDDEN), or platform administrator email protected (PLATFORM_ADMIN_ACCOUNT_PROTECTED).
           content:
             application/json:
               schema:
@@ -14725,10 +14697,158 @@ paths:
       tags:
         - Tenant
       operationId: get_tenant_quotas
+  /account/api-keys:
+    get:
+      summary: List personal API keys
+      description: Return only the current user's keys in the current organization, all statuses, newest first. Requires JWT authentication. Any live owner/admin/member membership is sufficient. Superadmins have the same personal scope. Secrets and hashes are never returned. Pagination totals count only this user's keys in this organization. A page beyond the history returns an empty data array with the same total and has_more false.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          description: Page number; supplied empty or noninteger values are invalid.
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: per_page
+          in: query
+          description: Items per page; supplied empty or noninteger values are invalid.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Personal API key history with pagination metadata
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/StandardResponse'
+                  - type: object
+                    required:
+                      - data
+                      - meta
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/TenantApiKeyListResponseData'
+                      meta:
+                        $ref: '#/components/schemas/PaginationMeta'
+        '401':
+          $ref: '#/components/responses/TenantOwnerUnauthorized'
+        '403':
+          $ref: '#/components/responses/TenantMemberForbidden'
+        '404':
+          description: TENANT_NOT_FOUND - tenant does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+        '422':
+          description: VALIDATION_ERROR with field details for invalid page or per_page, including empty values, nonintegers, page below 1, or per_page outside 1..100.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+      tags:
+        - Tenant
+      operationId: get_account_api_keys
+    post:
+      summary: Create a personal API key
+      description: Create a key owned by the current user in the current organization and return the one-time secret value (sk_syn_ plus 40 base62 characters). Requires JWT authentication. Any live owner/admin/member membership is sufficient, including for platform superadmins.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 100
+                expires_at:
+                  type: string
+                  nullable: true
+                  description: Future expiration date/time, normalized to UTC. Use ISO 8601 with an explicit timezone. Omitted, null, or empty means no expiry.
+                  example: '2030-01-01T00:00:00Z'
+      responses:
+        '201':
+          description: Tenant API key created
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/StandardResponse'
+                  - type: object
+                    required:
+                      - data
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/TenantApiKeyCreateResponseData'
+        '401':
+          $ref: '#/components/responses/TenantOwnerUnauthorized'
+        '403':
+          $ref: '#/components/responses/TenantMemberForbidden'
+        '404':
+          description: TENANT_NOT_FOUND - tenant does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+        '422':
+          description: VALIDATION_ERROR (including invalid or nonfuture expires_at) or API_KEY_LIMIT_EXCEEDED (default 5 active-status keys per user in an organization, including expired keys; the organization limit is disabled by default).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+        '500':
+          description: Unable to generate an API key (API_KEY_GENERATION_FAILED).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+      tags:
+        - Tenant
+      operationId: post_account_api_keys
+  /account/api-keys/{id}:
+    delete:
+      summary: Revoke a personal API key
+      description: Revoke an active-status key owned by the current user in the current organization. Any live owner/admin/member membership is sufficient. Superadmins have the same personal scope. Returns 204 without a body; missing, foreign-user, foreign-tenant, or already revoked keys all return 404 API_KEY_NOT_FOUND.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/ApiKeyId'
+      responses:
+        '204':
+          description: API key revoked
+        '401':
+          $ref: '#/components/responses/TenantOwnerUnauthorized'
+        '403':
+          $ref: '#/components/responses/TenantMemberForbidden'
+        '404':
+          description: NOT_FOUND for an invalid external ID, TENANT_NOT_FOUND for a missing tenant, or API_KEY_NOT_FOUND for a missing, foreign-user, foreign-tenant, or already revoked key.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+      tags:
+        - Tenant
+      operationId: delete_account_api_keys_id
   /tenant/api-keys:
     get:
-      summary: List tenant API keys
-      description: Return API keys metadata for current tenant. Secret key values are never returned in list.
+      summary: List organization API keys for administration
+      description: Administrative overview of all keys in the current organization, for owner/admin or a platform superadmin with a valid tenant context. Secret key values are never returned. Create personal keys through POST /account/api-keys. This list is not paginated.
       security:
         - bearerAuth: []
       responses:
@@ -14766,80 +14886,10 @@ paths:
       tags:
         - Tenant
       operationId: get_tenant_api_keys
-    post:
-      summary: Create tenant API key
-      description: Create a new API key for current tenant and return the one-time secret value (sk_syn_ plus 40 base62 characters). Requires a live owner/admin membership even for platform superadmins.
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - name
-              properties:
-                name:
-                  type: string
-                  minLength: 1
-                  maxLength: 100
-                expires_at:
-                  type: string
-                  nullable: true
-                  description: A future date/time accepted by PHP's date parser and normalized to UTC. Use ISO 8601 with an explicit timezone. Omitted, null, or empty means no expiry.
-                  example: '2030-01-01T00:00:00Z'
-      responses:
-        '201':
-          description: Tenant API key created
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - $ref: '#/components/schemas/StandardResponse'
-                  - type: object
-                    required:
-                      - data
-                    properties:
-                      data:
-                        $ref: '#/components/schemas/TenantApiKeyCreateResponseData'
-        '401':
-          description: UNAUTHORIZED for missing or malformed Bearer authorization; INVALID_TOKEN for an invalid or expired token.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/StandardErrorResponse'
-        '403':
-          description: TENANT_REQUIRED, TENANT_INACTIVE, FORBIDDEN (tenant mismatch or insufficient membership), or API_KEY_FORBIDDEN for API-key authentication.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/StandardErrorResponse'
-        '404':
-          description: TENANT_NOT_FOUND - tenant does not exist.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/StandardErrorResponse'
-        '422':
-          description: VALIDATION_ERROR (including invalid or nonfuture expires_at) or API_KEY_LIMIT_EXCEEDED (default 10 active-status keys, including expired keys).
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/StandardErrorResponse'
-        '500':
-          description: API_KEY_GENERATION_FAILED - unable to generate a unique key after retries.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/StandardErrorResponse'
-      tags:
-        - Tenant
-      operationId: post_tenant_api_keys
   /tenant/api-keys/{id}:
     delete:
       summary: Revoke tenant API key
-      description: Revoke an active-status API key by ID. Returns 204 without a body; an already revoked key returns 404 API_KEY_NOT_FOUND.
+      description: Administrative revocation of any member's active-status API key in the current organization, for owner/admin or a platform superadmin with a valid tenant context. Requires JWT authentication. Returns 204 without a body; an already revoked key returns 404 API_KEY_NOT_FOUND.
       security:
         - bearerAuth: []
       parameters:
@@ -14858,7 +14908,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/StandardErrorResponse'
         '403':
-          description: TENANT_REQUIRED, TENANT_INACTIVE, FORBIDDEN (tenant mismatch or insufficient membership), or API_KEY_FORBIDDEN for API-key authentication. A JWT platform superadmin with a valid tenant context passes requireOwnerOrAdmin regardless of membership role.
+          description: TENANT_REQUIRED, TENANT_INACTIVE, FORBIDDEN (tenant mismatch or insufficient permissions), or API_KEY_FORBIDDEN (JWT required).
           content:
             application/json:
               schema:
@@ -15249,7 +15299,7 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT or sk_syn_ API key
-      description: JWT session or organization API key sk_syn_ plus 40 base62 characters. Alternatively send X-API-Key without Authorization. Sending both headers returns 401 UNAUTHORIZED, even if either is empty. A request authenticated by a key uses its creator's current tenant role with auth.is_superadmin=false. Guarded /admin, /auth, /account, /oauth and /tenant/api-keys prefixes and member login-email changes are forbidden to keys. See info.description for scope, public operations, separate authentication protocols and the protection of other platform superadmins' email across authentication methods.
+      description: 'Send a JWT access token or organization API key as `Authorization: Bearer <token>`. API keys also support `X-API-Key: <key>`. Use only one authentication header. Some operations require a JWT access token.'
   schemas:
     AccountSettingsSttEngine:
       type: string
@@ -27336,6 +27386,12 @@ components:
             $ref: '#/components/schemas/StandardErrorResponse'
     TenantOwnerUnauthorized:
       description: UNAUTHORIZED (missing or malformed Bearer authorization) or INVALID_TOKEN (invalid or expired token), as rendered by auth.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/StandardErrorResponse'
+    TenantMemberForbidden:
+      description: TENANT_REQUIRED when membership or tenant context is missing (including superadmins), TENANT_INACTIVE when the organization is not active, FORBIDDEN when the token tenant does not match current membership or membership is lost before creation, or API_KEY_FORBIDDEN for API-key authentication. Any live owner/admin/member membership grants personal access; superadmin status does not expand the personal scope.
       content:
         application/json:
           schema:
