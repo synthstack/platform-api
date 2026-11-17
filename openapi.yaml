@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: SynthStack Backend API
-  version: v2.34.0+24765
+  version: v2.35.0+25094
   contact:
     name: SynthStack
     url: https://synthstack.ai
@@ -5761,7 +5761,7 @@ paths:
   /integrations/{id}/enable:
     post:
       summary: Enable integration
-      description: Enable the integration. If a provider system error recorded while disabled has not yet been superseded by a saved connection test result, disabled or error transitions to pending with message `Integration enabled; connection test required`, and pending returns the same response without a transition. Otherwise the target is active with message `Integration enabled`. Each actual transition records an integration.enabled outbox event; repeated calls already at the target return 200 without another event. Further system errors preserve the connection test requirement. POST /integrations/{id}/test saves active or error and clears that requirement. Requires tenant owner/admin or a superadmin with tenant context.
+      description: Enable the integration. If a provider system error recorded while disabled has not yet been superseded by a saved connection test result, disabled or error transitions to pending with message `Integration enabled; connection test required`, and pending returns the same response without a transition. Otherwise the target is active with message `Integration enabled`. Each actual transition records an integration.enabled outbox event; a transition to pending also records integration.connection_test_required in the same transaction so tenant owners/admins receive a connection-test notification, including the initiator, subject to notification preferences. Repeated calls already at the target return 200 without another event. Further system errors preserve the connection test requirement. POST /integrations/{id}/test saves active or error and clears that requirement. Requires tenant owner/admin or a superadmin with tenant context.
       operationId: integrationEnable
       parameters:
         - name: id
@@ -6022,6 +6022,7 @@ paths:
       summary: Discover data sources
       description: |
         Ask the backend adapter for discoverable data sources without storing them. Each descriptor, including metadata key/depth/size limits from payload_shape, is validated before returning any items. Invalid backend metadata produces DEPENDENCY_CONTRACT_VIOLATION (500), never client validation errors or a partial list.
+        Each item includes host-owned `is_registered` and `data_source_id` fields, replacing any provider values under those exact names. Registration status matches this integration's sources by the original `kind` and `external_ref` using database unique-key equality, without application normalization, trimming or per-item provider calls. It does not emulate POST registration's canonicalization: an alias may have false/null status even when POST would resolve it to an existing source. Database lookup failures fail the whole request. Pagination, item order and provider fields are preserved. Inside `provider_items`, only the host's `data_source_id` is a public `ds_…` ID (or null); provider fields such as `id`, `owner_id`, `metadata.*`, `created_by`, `uploaded_by`, their camelCase variants, `dataSourceId` and `data-source-id` retain their original values at every depth.
         BREAKING CHANGE in integrations 1.2.0: response data is now an object with `provider_items[]`. Clients that previously read discovered items from `data[]` must read them from `data.provider_items[]`.
       operationId: dataSourceDiscover
       x-synthstack-breaking-change:
@@ -6820,7 +6821,7 @@ paths:
   /projects:
     get:
       summary: List projects
-      description: List tenant-scoped projects with integrations and service declarations.
+      description: List tenant-scoped projects with integrations and service declarations. Integration and data source filters match any relation role and combine with tenant/user visibility, search and status. When both IDs are supplied they must match the same relation row. Each project is returned and counted in meta.total once. Archived projects retain relations and match with status=archived or all; deleted projects have no relations and never match these filters. Listing deleted projects without relation filters is unchanged.
       operationId: projectList
       parameters:
         - name: page
@@ -6874,6 +6875,18 @@ paths:
             type: string
             default: active
             example: active,archived
+        - name: integration_id
+          in: query
+          required: false
+          description: One public integration ID. Matches primary and auxiliary relations. Together with data_source_id, both IDs must match the same relation row. Valid nonexistent or foreign-tenant IDs return an empty list. Containers of valid IDs return 422 VALIDATION_ERROR after authentication and tenant checks. Archived projects retain relations; deleted projects do not.
+          schema:
+            $ref: '#/components/schemas/IntegrationId'
+        - name: data_source_id
+          in: query
+          required: false
+          description: One public data source ID. Matches primary and auxiliary relations with this source, independently of integration when integration_id is omitted. Together with integration_id, both IDs must match the same relation row. Valid nonexistent or foreign-tenant IDs return an empty list. Containers of valid IDs return 422 VALIDATION_ERROR after authentication and tenant checks. Archived projects retain relations; deleted projects do not.
+          schema:
+            $ref: '#/components/schemas/DataSourceId'
       responses:
         '200':
           description: Project list
@@ -6903,8 +6916,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/StandardErrorResponse'
+        '404':
+          description: NOT_FOUND — invalid public integration_id or data_source_id in query (including empty values, bare numbers, wrong prefixes or noncanonical encodings). ID decoding runs before authentication.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
         '422':
-          description: Invalid list filters or sorting
+          description: VALIDATION_ERROR — invalid list filters or sorting. Containers of valid integration_id/data_source_id values are rejected after authentication and tenant checks with details[{field, message}]. Each ID filter requires exactly one positive integer after idEncode decoding.
           content:
             application/json:
               schema:
@@ -10690,9 +10709,16 @@ paths:
         - $ref: '#/components/parameters/TaskProjectIdPath'
         - $ref: '#/components/parameters/TaskPageQuery'
         - $ref: '#/components/parameters/TaskPerPageQuery'
+        - name: q
+          in: query
+          required: false
+          description: Case-insensitive substring search in label names under the database collation. Must be valid UTF-8, at most 100 Unicode code points before trimming. Trimmed empty values apply no filter; percent signs and underscores are literal.
+          schema:
+            type: string
+            maxLength: 100
       responses:
         '200':
-          description: Task labels.
+          description: Task labels ordered by name ASC, id ASC; meta.total counts only matching labels.
           content:
             application/json:
               schema:
@@ -10713,6 +10739,8 @@ paths:
           $ref: '#/components/responses/TasksForbidden'
         '404':
           $ref: '#/components/responses/TasksNotFound'
+        '422':
+          $ref: '#/components/responses/TasksValidationError'
         '500':
           $ref: '#/components/responses/TasksProjectDependencyError'
         '503':
@@ -11496,22 +11524,11 @@ paths:
         - Tasks
       summary: List tenant artifacts visible to the current user
       operationId: tenantTaskArtifactsList
-      description: 'Returns surviving artifact records from all iterations and executions of non-deleted tenant tasks in projects visible to the current user, including historical executions. Deleted artifacts, deleted tasks, inaccessible/deleted projects and system git_bundle artifacts are never returned or counted. This catalog is not a permanent archive or an inventory of Git/S3 contents. attachment is included and can be used by file pickers. Filters only narrow the authorized scope; they never grant additional access. Results have deterministic newest-first order: created_at DESC, id DESC. Pagination does not provide a snapshot: new records can shift items between pages. The response is data[] with meta {total, limit, offset, has_more}.'
+      description: 'Returns surviving artifact records from all iterations and executions of non-deleted tenant tasks in projects visible to the current user, including historical executions. Deleted artifacts, deleted tasks, inaccessible/deleted projects and system git_bundle artifacts are never returned or counted. This catalog is not a permanent archive or an inventory of Git/S3 contents. attachment is included and can be used by file pickers. Filters only narrow the authorized scope; they never grant additional access. Results have deterministic newest-first order: created_at DESC, id DESC. Pagination does not provide a snapshot: new records can shift items between pages. The response is data[] with meta {total, limit, offset, has_more}. Invalid queries return 422 VALIDATION_ERROR with combined error.details for kind and created_from/created_to errors, including date type, format and range errors.'
       parameters:
         - $ref: '#/components/parameters/TaskTenantArtifactPageQuery'
         - $ref: '#/components/parameters/TaskPerPageQuery'
-        - name: kind
-          in: query
-          schema:
-            type: string
-            enum:
-              - log
-              - diff
-              - report
-              - preview
-              - file
-              - attachment
-              - external_link
+        - $ref: '#/components/parameters/TaskArtifactKindFilterQuery'
         - name: project_id
           in: query
           schema:
@@ -11568,7 +11585,11 @@ paths:
         '403':
           $ref: '#/components/responses/TasksForbidden'
         '422':
-          $ref: '#/components/responses/TasksValidationError'
+          description: VALIDATION_ERROR with combined error.details for query validation, kind, and created_from/created_to type, format, empty boundary or range errors.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
         '429':
           $ref: '#/components/responses/TasksRateLimited'
         '500':
@@ -11822,36 +11843,55 @@ paths:
         '503':
           $ref: '#/components/responses/TasksServiceUnavailable'
       description: Revoke an artifact share link idempotently
-  /public/artifacts/{token}:
-    get:
+  /public/artifact-shares/resolve:
+    post:
       tags:
         - Tasks
-      summary: Download an artifact through a public share token
-      operationId: publicTaskArtifactDownload
+      summary: Resolve an artifact share token
+      operationId: publicArtifactShareResolve
+      description: Public read using POST to keep the secret out of URLs. No authentication or tenant is required. Rate limit is 60 requests/minute per IP, fail-closed. Each success counts one accepted access. As an intentional exception to action responses, data has no id/status/message fields. The token must be sent only in the JSON body, never in path or query.
       security: []
-      parameters:
-        - name: token
-          in: path
-          required: true
-          schema:
-            type: string
-            pattern: ^[A-Za-z0-9_-]{43}$
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublicArtifactShareResolveRequest'
       responses:
-        '302':
-          description: Redirect to a short-lived presigned artifact URL.
+        '200':
+          description: Artifact metadata, current tenant/project/task names and a temporary attachment download URL.
           headers:
-            Location:
-              required: true
-              schema:
-                type: string
             Cache-Control:
               required: true
               schema:
                 type: string
                 enum:
                   - no-store
+            Pragma:
+              required: true
+              schema:
+                type: string
+                enum:
+                  - no-cache
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/StandardResponse'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/PublicArtifactShareResolveResponseData'
+                    required:
+                      - data
         '404':
-          description: Uniform response for every invalid, expired, or revoked token.
+          description: Uniform NOT_FOUND / Not found response for malformed, unknown, expired or revoked tokens; missing or unshareable artifacts; missing tasks, project mismatch or absent/deleted projects; missing tenant of the share link; missing/unavailable immutable revisions (including storage mismatch or HEAD 404); expiry or revocation before atomic access acceptance by the database clock.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardErrorResponse'
+        '422':
+          description: VALIDATION_ERROR for missing, non-string, empty or longer than 255 character token; details[].field is token.
           content:
             application/json:
               schema:
@@ -11862,15 +11902,25 @@ paths:
           $ref: '#/components/responses/TasksInternalError'
         '503':
           $ref: '#/components/responses/TasksServiceUnavailable'
-      description: Download an artifact through a public share token
   /tasks/entries/{id}/artifacts:
     get:
       tags:
         - Tasks
       summary: List task artifacts
-      description: List public task artifact descriptors. git_bundle artifacts are system artifacts and are never returned or counted; kind=git_bundle returns 422. S3 storage keys are never exposed; external links keep their source URL.
+      description: List live public artifact descriptors, ordered by created_at DESC, id DESC. origin defaults to own; input includes artifacts from other tasks accepted by any iteration of this task, including its initial iteration; all combines both scopes. Each artifact is returned and counted once, regardless of the number of execution grants. Same-task inputs remain own. Physically deleted artifacts and artifacts of soft-deleted source tasks are excluded from data and total. Existing grants remain visible when cross-task selection is disabled. Input descriptors and source identifiers do not require viewer access to the source project; direct artifact reads and downloads still require it (404 ARTIFACT_NOT_FOUND and 404 PROJECT_NOT_FOUND respectively). All descriptor fields and execution_id, iteration_id, agent_id filters refer to the producer, never to the consumer. CSV kind filters apply to both scopes. git_bundle artifacts are system artifacts and are never returned or counted; kind=git_bundle returns 422. S3 storage keys are never exposed; external links keep their source URL. Missing, deleted or foreign-tenant target tasks return 404 TASK_NOT_FOUND; inaccessible target projects return 404 PROJECT_NOT_FOUND; malformed encoded IDs return 404 NOT_FOUND. The 403 responses are tenant-context errors (FORBIDDEN, TENANT_REQUIRED, TENANT_INACTIVE). For compatibility, own retains its existing task-ID scope. input and all additionally check the artifact row's tenant against the target task's tenant. With inconsistent stored tenant IDs, an own row can therefore be excluded from all (both data and total); on consistent data, all is exactly the union of own and input.
       operationId: taskArtifactsList
       parameters:
+        - name: origin
+          in: query
+          required: false
+          description: own lists this task's artifacts; input lists live artifacts from other tasks accepted by any iteration; all is their deduplicated union. Deleted artifacts and soft-deleted source tasks are excluded from items and total. Empty or unknown values (including arrays) return 422 VALIDATION_ERROR with details[].field = origin.
+          schema:
+            type: string
+            enum:
+              - own
+              - input
+              - all
+            default: own
         - $ref: '#/components/parameters/TaskIdPath'
         - $ref: '#/components/parameters/TaskPageQuery'
         - $ref: '#/components/parameters/TaskPerPageQuery'
@@ -11889,11 +11939,7 @@ paths:
           required: false
           schema:
             $ref: '#/components/schemas/AgentId'
-        - name: kind
-          in: query
-          required: false
-          schema:
-            $ref: '#/components/schemas/TaskLegacyArtifactKind'
+        - $ref: '#/components/parameters/TaskArtifactKindFilterQuery'
       responses:
         '200':
           description: Task artifacts.
@@ -19122,7 +19168,8 @@ components:
         $ref: '#/components/schemas/DataSourceResponseData'
     DiscoveredDataSource:
       type: object
-      description: Validated provider descriptor. Optional display_name and metadata are returned only when supplied by the backend; provider-specific fields are preserved.
+      description: |
+        Validated provider descriptor with host registration status (integrations 1.16.0). Optional display_name and metadata are returned only when supplied by the backend; provider-specific fields are preserved. The host overwrites any provider-supplied is_registered and data_source_id fields.
       properties:
         kind:
           $ref: '#/components/schemas/DataSourceKind'
@@ -19132,15 +19179,31 @@ components:
           type: string
         metadata:
           $ref: '#/components/schemas/IntegrationBoundedPayloadObject'
+        is_registered:
+          type: boolean
+          description: |
+            Host field indicating a registered source in this integration matching the original kind and external_ref, using the database unique key's equality semantics. No application normalization, trimming, provider lookup or registration canonicalization is performed. An alias can therefore be unregistered here even when POST registration would resolve it to an existing canonical source.
+        data_source_id:
+          description: |
+            Host field containing the matching registered source's public ID, or null when is_registered is false. Replaces any provider-supplied data_source_id value.
+          anyOf:
+            - allOf:
+                - $ref: '#/components/schemas/DataSourceId'
+            - type: string
+              nullable: true
+              enum:
+                - null
       required:
         - kind
         - external_ref
+        - is_registered
+        - data_source_id
       additionalProperties: true
     DataSourceDiscoverResponseData:
       type: object
       description: |
         BREAKING CHANGE in integrations 1.2.0: provider-discovered items moved from the previous top-level `data[]` list to `data.provider_items[]`.
-        Provider-discovered data sources are exposed under the reserved `provider_items` key so raw provider identifiers are not transformed by idEncode.
+        Provider-discovered data sources are exposed under the reserved `provider_items` key, which automatic idEncode skips entirely. Only the host's `data_source_id` is encoded as a public ID at the HTTP boundary. All provider fields at any depth, including `id`, `owner_id`, `metadata.id`, global alias names such as `created_by`/`uploaded_by`, their camelCase variants, `dataSourceId` and `data-source-id`, retain their original provider values.
       properties:
         provider_items:
           type: array
@@ -23977,6 +24040,15 @@ components:
               nullable: true
               enum:
                 - null
+        uploaded_by:
+          description: User who uploaded the file promoted to an attachment. Null for agent artifacts, external links, historical attachments without a retained upload record, and saved snapshots without this field. Always null in publication artifact lists under the current publication rules (file, report, preview and diff only).
+          anyOf:
+            - allOf:
+                - $ref: '#/components/schemas/UserId'
+            - type: string
+              nullable: true
+              enum:
+                - null
         created_at:
           $ref: '#/components/schemas/TaskDateTime'
         result_metadata:
@@ -23997,10 +24069,40 @@ components:
         - iteration_id
         - agent_id
         - created_at
+    TaskArtifactListItemResponseData:
+      allOf:
+        - $ref: '#/components/schemas/TaskArtifactDescriptorResponseData'
+        - type: object
+          required:
+            - origin
+            - source
+          properties:
+            origin:
+              type: string
+              enum:
+                - own
+                - input
+              description: Own artifact or an artifact from another task accepted as an input.
+            source:
+              type: object
+              nullable: true
+              additionalProperties: false
+              required:
+                - project_id
+                - task_id
+                - artifact_id
+              description: Producer identifiers for inputs; artifact_id equals id. Null for own artifacts.
+              properties:
+                project_id:
+                  $ref: '#/components/schemas/ProjectId'
+                task_id:
+                  $ref: '#/components/schemas/TaskId'
+                artifact_id:
+                  $ref: '#/components/schemas/TaskArtifactId'
     TaskArtifactListResponseData:
       type: array
       items:
-        $ref: '#/components/schemas/TaskArtifactDescriptorResponseData'
+        $ref: '#/components/schemas/TaskArtifactListItemResponseData'
     TaskTenantArtifactDescriptorResponseData:
       allOf:
         - $ref: '#/components/schemas/TaskArtifactDescriptorResponseData'
@@ -24162,6 +24264,113 @@ components:
         - started_at
         - finished_at
         - error_message
+    PublicArtifactShareResolveRequest:
+      type: object
+      required:
+        - token
+      properties:
+        token:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Secret from the URL fragment. Expected base64url format is 43 characters; a format mismatch returns uniform 404, not 422.
+    PublicArtifactShareResolveResponseData:
+      type: object
+      additionalProperties: false
+      required:
+        - artifact
+        - download
+        - share
+        - context
+      description: Whitelisted anonymous fields only; no standalone identifiers. The current tenant name, project name and task title are always disclosed in context; no other tenant/project/task data, author, agent, slug, status, email or internal fields are exposed. The object address inside download.url is an accepted disclosure of the presigned model.
+      properties:
+        artifact:
+          type: object
+          additionalProperties: false
+          required:
+            - name
+            - kind
+            - content_type
+            - size_bytes
+            - created_at
+          properties:
+            name:
+              type: string
+            kind:
+              type: string
+              enum:
+                - log
+                - diff
+                - report
+                - preview
+                - file
+                - attachment
+            content_type:
+              type: string
+              nullable: true
+              description: Declared MIME hint from metadata; not a trusted type guarantee.
+            size_bytes:
+              type: integer
+              minimum: 0
+              nullable: true
+              description: Metadata hint; runner callback values may differ from the object. Preview must limit actual bytes read.
+            created_at:
+              $ref: '#/components/schemas/TaskDateTime'
+        download:
+          type: object
+          additionalProperties: false
+          required:
+            - url
+            - expires_at
+          properties:
+            url:
+              type: string
+              description: Presigned GET with attachment disposition and the artifact filename; TTL is artifact_url_ttl (default 600 seconds). Non-log artifacts address the pinned immutable revision. Contains storage host/bucket and full key, including public project/execution IDs and filename. Already issued URLs remain usable until expiry even after share revocation or expiry.
+            expires_at:
+              allOf:
+                - $ref: '#/components/schemas/TaskDateTime'
+              description: Refresh with resolve before navigating to an expired URL; retry a failed preview fetch after expiry only once.
+        share:
+          type: object
+          additionalProperties: false
+          required:
+            - expires_at
+          properties:
+            expires_at:
+              $ref: '#/components/schemas/TaskDateTime'
+        context:
+          type: object
+          additionalProperties: false
+          required:
+            - tenant
+            - project
+            - task
+          description: Current names for every active share link, without normalization or truncation. Render as untrusted text, never HTML.
+          properties:
+            tenant:
+              type: object
+              additionalProperties: false
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+            project:
+              type: object
+              additionalProperties: false
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+            task:
+              type: object
+              additionalProperties: false
+              required:
+                - title
+              properties:
+                title:
+                  type: string
     TaskArtifactShareCreateRequestBody:
       type: object
       properties:
@@ -24183,9 +24392,7 @@ components:
         url:
           type: string
           nullable: true
-          description: Full public URL when artifact_share.public_base_url is configured; otherwise null.
-        path:
-          type: string
+          description: Share page URL with a fragment (artifact_share.page_url + '#' + token); null when page_url is empty.
         expires_at:
           $ref: '#/components/schemas/TaskDateTime'
         created_by:
@@ -24197,7 +24404,6 @@ components:
         - artifact_id
         - token
         - url
-        - path
         - expires_at
         - created_by
         - created_at
@@ -24217,8 +24423,11 @@ components:
         download_count:
           type: integer
           minimum: 0
+          description: Number of successful public resolves, each issuing a download URL.
         last_accessed_at:
-          $ref: '#/components/schemas/TaskNullableDateTime'
+          description: Database UTC time at access acceptance, after acquiring the link row lock.
+          allOf:
+            - $ref: '#/components/schemas/TaskNullableDateTime'
         created_by:
           $ref: '#/components/schemas/UserId'
         can_revoke:
@@ -26579,6 +26788,14 @@ components:
       required: true
       schema:
         $ref: '#/components/schemas/SkillId'
+    TaskArtifactKindFilterQuery:
+      name: kind
+      in: query
+      required: false
+      description: One public artifact kind or a comma-separated list, combined with logical OR. Allowed case-sensitive values are log, diff, report, preview, file, attachment, external_link. Entries are trimmed; empty entries are ignored and duplicates are collapsed. At most 32 entries are allowed before removing empty entries or duplicates. An omitted or empty value applies no kind filter. Arrays, unknown values and git_bundle in any position return 422 VALIDATION_ERROR with field kind. Other filters are combined with logical AND; totals count the filtered union.
+      schema:
+        type: string
+      example: log,diff
     TaskProjectIdPath:
       name: project_id
       in: path
@@ -27289,13 +27506,13 @@ components:
           schema:
             $ref: '#/components/schemas/StandardErrorResponse'
     TasksServiceUnavailable:
-      description: Required storage, backend service or request guard is unavailable (for example ARTIFACT_STORAGE_NOT_CONFIGURED). Authenticated operations that resolve project access through projectService.get can also return DEPENDENCY_UNAVAILABLE from projects; details[].source/operation use source projects and the invoked projectService method. Public share-link downloads do not perform that project access lookup.
+      description: Required storage, backend service or request guard is unavailable (for example ARTIFACT_STORAGE_NOT_CONFIGURED). Authenticated operations that resolve project access through projectService.get can also return DEPENDENCY_UNAVAILABLE from projects; details[].source/operation use source projects and the invoked projectService method. Public artifact share resolve calls projects via projectService.getDirectoryEntry and tenant via tenantService.getById and can return DEPENDENCY_UNAVAILABLE, ARTIFACT_STORAGE_NOT_CONFIGURED, ARTIFACT_STORAGE_UNAVAILABLE or RATE_LIMIT_UNAVAILABLE. Dependency details[].source/operation contain only projects / projectService.getDirectoryEntry or tenant / tenantService.getById.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/StandardErrorResponse'
     TasksInternalError:
-      description: Internal configuration or processing error. Authenticated share-link creation can also fail during project access with DEPENDENCY_CONFIGURATION_ERROR, DEPENDENCY_CONTRACT_VIOLATION or DEPENDENCY_FAILED; in that case details[].source/operation use source projects and the invoked projectService method; debug is omitted.
+      description: Internal configuration or processing error (including INTERNAL_ERROR for an empty token pepper). Public artifact share resolve calls projects via projectService.getDirectoryEntry and tenant via tenantService.getById and can return DEPENDENCY_CONFIGURATION_ERROR, DEPENDENCY_CONTRACT_VIOLATION or DEPENDENCY_FAILED; dependency details[].source/operation contain only projects / projectService.getDirectoryEntry or tenant / tenantService.getById. Missing or non-string names from either directory port return DEPENDENCY_CONTRACT_VIOLATION. Authenticated share-link creation can also fail during project access with DEPENDENCY_CONFIGURATION_ERROR, DEPENDENCY_CONTRACT_VIOLATION or DEPENDENCY_FAILED; in that case details[].source/operation use source projects and the invoked projectService method; debug is omitted.
       content:
         application/json:
           schema:
