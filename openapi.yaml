@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: SynthStack Backend API
-  version: v2.35.0+25094
+  version: v2.36.0+25276
   contact:
     name: SynthStack
     url: https://synthstack.ai
@@ -10789,6 +10789,38 @@ paths:
         '503':
           $ref: '#/components/responses/TasksProjectDependencyUnavailable'
   /tasks/labels/{id}:
+    get:
+      tags:
+        - Tasks
+      summary: Get task label
+      operationId: taskLabelGet
+      description: Returns a label in the current tenant if the caller can access its project, even when no tasks use the label. An invalid public ID returns NOT_FOUND; a missing or cross-tenant label returns TASK_LABEL_NOT_FOUND; a missing or inaccessible project returns PROJECT_NOT_FOUND.
+      parameters:
+        - $ref: '#/components/parameters/TaskLabelIdPath'
+      responses:
+        '200':
+          description: Task label details.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/StandardResponse'
+                  - type: object
+                    required:
+                      - data
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/TaskLabelResponseData'
+        '401':
+          $ref: '#/components/responses/TasksUnauthorized'
+        '403':
+          $ref: '#/components/responses/TasksForbidden'
+        '404':
+          $ref: '#/components/responses/TasksNotFound'
+        '500':
+          $ref: '#/components/responses/TasksProjectDependencyError'
+        '503':
+          $ref: '#/components/responses/TasksProjectDependencyUnavailable'
     patch:
       tags:
         - Tasks
@@ -21615,9 +21647,13 @@ components:
           type: string
           pattern: ^#[0-9a-fA-F]{6}$
         created_at:
-          $ref: '#/components/schemas/TaskDateTime'
+          type: string
+          description: Storage timestamp in YYYY-MM-DD HH:MM:SS format without a time zone indicator (not RFC 3339).
+          example: '2026-11-18 14:00:00'
         updated_at:
-          $ref: '#/components/schemas/TaskDateTime'
+          type: string
+          description: Storage timestamp in YYYY-MM-DD HH:MM:SS format without a time zone indicator (not RFC 3339).
+          example: '2026-11-18 14:00:00'
       required:
         - id
         - name
